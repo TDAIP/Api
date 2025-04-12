@@ -4,6 +4,7 @@ const ffmpegPath = require('ffmpeg-static');
 const axios = require('axios');
 const tmp = require('tmp');
 const fs = require('fs');
+const path = require('path');
 
 ffmpeg.setFfmpegPath(ffmpegPath);
 
@@ -16,6 +17,8 @@ app.get('/thumbnail', async (req, res) => {
 
   try {
     const tmpVideo = tmp.fileSync({ postfix: '.mp4' });
+    const tmpDir = tmp.dirSync();
+
     const videoStream = await axios({
       method: 'get',
       url: videoUrl,
@@ -26,16 +29,15 @@ app.get('/thumbnail', async (req, res) => {
     videoStream.data.pipe(writer);
 
     writer.on('finish', () => {
-      const tmpImage = tmp.tmpNameSync({ postfix: '.jpg' });
-
       ffmpeg(tmpVideo.name)
         .on('end', () => {
-          const img = fs.readFileSync(tmpImage);
+          const thumbPath = path.join(tmpDir.name, 'thumb.jpg');
+          const img = fs.readFileSync(thumbPath);
           res.setHeader('Content-Type', 'image/jpeg');
           res.send(img);
 
           fs.unlinkSync(tmpVideo.name);
-          fs.unlinkSync(tmpImage);
+          fs.unlinkSync(thumbPath);
         })
         .on('error', (err) => {
           res.status(500).json({ error: 'FFmpeg error: ' + err.message });
@@ -43,7 +45,8 @@ app.get('/thumbnail', async (req, res) => {
         .screenshots({
           count: 1,
           timemarks: ['00:00:01'],
-          filename: tmpImage,
+          folder: tmpDir.name,
+          filename: 'thumb.jpg',
         });
     });
   } catch (err) {
