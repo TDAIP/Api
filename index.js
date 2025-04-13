@@ -5,6 +5,7 @@ const axios = require('axios');
 const tmp = require('tmp');
 const fs = require('fs');
 const path = require('path');
+const puppeteer = require('puppeteer'); // Add puppeteer for website screenshots
 
 ffmpeg.setFfmpegPath(ffmpegPath);
 const app = express();
@@ -55,6 +56,27 @@ app.get('/thumbnail', async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ error: 'Failed to process video: ' + err.message });
+  }
+});
+
+// GET /thumbnail/{url}
+app.get('/thumbnail/:url', async (req, res) => {
+  const { url } = req.params;
+
+  if (!url) return res.status(400).json({ error: 'Missing URL' });
+
+  try {
+    const browser = await puppeteer.launch();
+    const page = await browser.newPage();
+    await page.goto(`https://${url}`, { waitUntil: 'networkidle2' }); // Navigate to the URL
+
+    const screenshot = await page.screenshot({ type: 'png' }); // Capture screenshot in PNG format
+    await browser.close();
+
+    res.setHeader('Content-Type', 'image/png');
+    res.send(screenshot);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to capture screenshot: ' + err.message });
   }
 });
 
