@@ -5,17 +5,21 @@ const axios = require('axios');
 const tmp = require('tmp');
 const fs = require('fs');
 const path = require('path');
-const puppeteer = require('puppeteer'); // Add puppeteer for website screenshots
+const puppeteer = require('puppeteer');
 
 ffmpeg.setFfmpegPath(ffmpegPath);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Danh sách từ toxic (có thể mở rộng sau)
 const toxicWords = [
   "sex", "nude", "fuck", "bitch", "nipples", "boobs", "porn", "dick", "pussy", "ass", "xxx", "slut", "horny", "naked"
 ];
 
-// GET /thumbnail?url=https://your-video.mp4
+/**
+ * Endpoint /thumbnail?url={video_url}
+ * Trích thumbnail từ video dưới dạng file MP4
+ */
 app.get('/thumbnail', async (req, res) => {
   const videoUrl = req.query.url;
   if (!videoUrl) return res.status(400).json({ error: 'Missing video URL' });
@@ -24,6 +28,7 @@ app.get('/thumbnail', async (req, res) => {
     const tmpVideo = tmp.fileSync({ postfix: '.mp4' });
     const tmpDir = tmp.dirSync();
 
+    // Tải video về file tạm
     const videoStream = await axios({
       method: 'get',
       url: videoUrl,
@@ -41,6 +46,7 @@ app.get('/thumbnail', async (req, res) => {
           res.setHeader('Content-Type', 'image/jpeg');
           res.send(img);
 
+          // Xóa file tạm
           fs.unlinkSync(tmpVideo.name);
           fs.unlinkSync(thumbPath);
         })
@@ -54,37 +60,23 @@ app.get('/thumbnail', async (req, res) => {
           filename: 'thumb.jpg',
         });
     });
+    writer.on('error', (err) => {
+      res.status(500).json({ error: 'Error writing video file: ' + err.message });
+    });
   } catch (err) {
     res.status(500).json({ error: 'Failed to process video: ' + err.message });
   }
 });
 
-// GET /thumbnail/{url}
-app.get('/thumbnail/:url', async (req, res) => {
-  const { url } = req.params;
-
-  if (!url) return res.status(400).json({ error: 'Missing URL' });
-
-  try {
-    const browser = await puppeteer.launch();
-    const page = await browser.newPage();
-    await page.goto(`https://${url}`, { waitUntil: 'networkidle2' }); // Navigate to the URL
-
-    const screenshot = await page.screenshot({ type: 'png' }); // Capture screenshot in PNG format
-    await browser.close();
-
-    res.setHeader('Content-Type', 'image/png');
-    res.send(screenshot);
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to capture screenshot: ' + err.message });
-  }
-});
-
-// GET /toxic/:text
+/**
+ * Endpoint /toxic/{text}
+ * Kiểm tra và trả về các từ toxic nếu có trong text
+ */
 app.get('/toxic/:text', (req, res) => {
   const { text } = req.params;
   if (!text) return res.status(400).json({ error: 'Missing text' });
 
+  // Tách các từ bằng regex
   const words = text.toLowerCase().split(/[^a-zA-Z0-9]+/);
   const result = {};
 
@@ -99,6 +91,40 @@ app.get('/toxic/:text', (req, res) => {
     status: Object.keys(result).length > 0,
     data: result
   });
+});
+
+/**
+ * Endpoint /dia/{url}
+ * Chụp screenshot PNG của website được truyền qua URL.
+ * Ví dụ: /dia/https%3A%2F%2Fexample.com
+ */
+app.get('/dia/:url', async (req, res) => {
+  try {
+    // URL được mã hóa trong route, cần decode lại
+    let websiteUrl = decodeURIComponent(req.params.url);
+
+    // Nếu chưa có http:// hoặc https:// thì thêm mặc định http://
+    if (!/^https?:\/\//i.test(websiteUrl)) {
+      websiteUrl = 'http://' + websiteUrl;
+    }
+
+    // Khởi chạy Puppeteer
+    const browser = await puppeteer.launch({
+      args: ['--no-sandbox', '--disable-setuid-sandbox']
+    });
+    const page = await browser.newPage();
+    await page.goto(websiteUrl, { waitUntil: 'networkidle2' });
+
+    // Chụp ảnh với định dạng PNG
+    const screenshotBuffer = await page.screenshot({ fullPage: true });
+
+    await browser.close();
+
+    res.setHeader('Content-Type', 'image/png');
+    res.send(screenshotBuffer);
+  } catch (err) {
+    res.status(500).json({ error: 'Error taking screenshot: ' + err.message });
+  }
 });
 
 app.listen(PORT, () => console.log(`API running on port ${PORT}`));
