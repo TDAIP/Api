@@ -5,30 +5,31 @@ const axios = require('axios');
 const tmp = require('tmp');
 const fs = require('fs');
 const path = require('path');
-const puppeteer = require('puppeteer');
 
 ffmpeg.setFfmpegPath(ffmpegPath);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Danh sách từ toxic (có thể mở rộng sau)
+// Danh sách từ "tục" – có thể cập nhật thêm nếu cần
 const toxicWords = [
   "sex", "nude", "fuck", "bitch", "nipples", "boobs", "porn", "dick", "pussy", "ass", "xxx", "slut", "horny", "naked"
 ];
 
-/**
- * Endpoint /thumbnail?url={video_url}
- * Trích thumbnail từ video dưới dạng file MP4
- */
+//
+// 1. Route /thumbnail?url={video_url}
+// Trích thumbnail từ video (ví dụ MP4)
+//
 app.get('/thumbnail', async (req, res) => {
   const videoUrl = req.query.url;
   if (!videoUrl) return res.status(400).json({ error: 'Missing video URL' });
 
   try {
+    // Tạo file tạm cho video
     const tmpVideo = tmp.fileSync({ postfix: '.mp4' });
+    // Tạo thư mục tạm để chứa thumbnail
     const tmpDir = tmp.dirSync();
 
-    // Tải video về file tạm
+    // Tải video từ URL và ghi vào file tạm
     const videoStream = await axios({
       method: 'get',
       url: videoUrl,
@@ -46,7 +47,7 @@ app.get('/thumbnail', async (req, res) => {
           res.setHeader('Content-Type', 'image/jpeg');
           res.send(img);
 
-          // Xóa file tạm
+          // Dọn dẹp file tạm
           fs.unlinkSync(tmpVideo.name);
           fs.unlinkSync(thumbPath);
         })
@@ -55,33 +56,31 @@ app.get('/thumbnail', async (req, res) => {
         })
         .screenshots({
           count: 1,
-          timemarks: ['00:00:01'],
+          timemarks: ['00:00:01'], // Lấy ảnh tại giây thứ 1
           folder: tmpDir.name,
-          filename: 'thumb.jpg',
+          filename: 'thumb.jpg'
         });
-    });
-    writer.on('error', (err) => {
-      res.status(500).json({ error: 'Error writing video file: ' + err.message });
     });
   } catch (err) {
     res.status(500).json({ error: 'Failed to process video: ' + err.message });
   }
 });
 
-/**
- * Endpoint /toxic/{text}
- * Kiểm tra và trả về các từ toxic nếu có trong text
- */
+//
+// 2. Route /toxic/:text
+// Kiểm tra văn bản có chứa từ ngữ tục tĩu/khiêu dâm không
+//
 app.get('/toxic/:text', (req, res) => {
   const { text } = req.params;
   if (!text) return res.status(400).json({ error: 'Missing text' });
 
-  // Tách các từ bằng regex
+  // Tách các từ, chuyển về chữ thường để so sánh
   const words = text.toLowerCase().split(/[^a-zA-Z0-9]+/);
   const result = {};
 
   words.forEach(word => {
     if (toxicWords.includes(word)) {
+      // Tạo ID ngẫu nhiên cho mỗi từ được tìm thấy
       const id = Math.random().toString(36).substring(2, 18);
       result[id] = { Toxic: word.charAt(0).toUpperCase() + word.slice(1) };
     }
@@ -93,38 +92,80 @@ app.get('/toxic/:text', (req, res) => {
   });
 });
 
-/**
- * Endpoint /dia/{url}
- * Chụp screenshot PNG của website được truyền qua URL.
- * Ví dụ: /dia/https%3A%2F%2Fexample.com
- */
-app.get('/dia/:url', async (req, res) => {
-  try {
-    // URL được mã hóa trong route, cần decode lại
-    let websiteUrl = decodeURIComponent(req.params.url);
+//
+// 3. Route /dia
+// Giao diện để cấu hình số lượng bot và nút Start + Preview.
+// Khi nhấn Start, sẽ mở các cửa sổ mới với URL: 
+// https://r8.whiteboardfox.com/85955809-7162-9594 và cố gắng di chuyển ngẫu nhiên.
+//
+app.get('/dia', (req, res) => {
+  const html = `
+  <!DOCTYPE html>
+  <html>
+  <head>
+    <meta charset="UTF-8">
+    <title>Bot Controller Interface</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 20px; }
+      .container { max-width: 600px; margin: auto; }
+      input[type="number"] { width: 60px; }
+      button { margin: 5px; padding: 10px 20px; }
+      #previewArea div { border: 1px solid #ccc; padding: 10px; margin: 5px 0; }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Bot Controller Interface</h1>
+      <p>Nhập số lượng bot muốn mở:</p>
+      <label for="botCount">Số lượng bot: </label>
+      <input type="number" id="botCount" value="3" min="1" />
+      <br/>
+      <button id="previewBtn">Preview</button>
+      <button id="startBtn">Start</button>
+      <div id="previewArea" style="margin-top:20px;"></div>
+    </div>
 
-    // Nếu chưa có http:// hoặc https:// thì thêm mặc định http://
-    if (!/^https?:\/\//i.test(websiteUrl)) {
-      websiteUrl = 'http://' + websiteUrl;
-    }
+    <script>
+      // URL trắng của whiteboard
+      const whiteboardUrl = "https://r8.whiteboardfox.com/85955809-7162-9594";
+      const botWindows = [];
 
-    // Khởi chạy Puppeteer
-    const browser = await puppeteer.launch({
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
-    });
-    const page = await browser.newPage();
-    await page.goto(websiteUrl, { waitUntil: 'networkidle2' });
+      document.getElementById('previewBtn').addEventListener('click', () => {
+        const count = parseInt(document.getElementById('botCount').value, 10);
+        const previewArea = document.getElementById('previewArea');
+        previewArea.innerHTML = '';
+        for(let i = 0; i < count; i++){
+          const div = document.createElement('div');
+          div.textContent = "Bot " + (i+1) + ": Sẽ mở cửa sổ với URL " + whiteboardUrl + " và thực hiện hành động ngẫu nhiên.";
+          previewArea.appendChild(div);
+        }
+      });
 
-    // Chụp ảnh với định dạng PNG
-    const screenshotBuffer = await page.screenshot({ fullPage: true });
-
-    await browser.close();
-
-    res.setHeader('Content-Type', 'image/png');
-    res.send(screenshotBuffer);
-  } catch (err) {
-    res.status(500).json({ error: 'Error taking screenshot: ' + err.message });
-  }
+      document.getElementById('startBtn').addEventListener('click', () => {
+        const count = parseInt(document.getElementById('botCount').value, 10);
+        for(let i = 0; i < count; i++){
+          const botWin = window.open(whiteboardUrl, '_blank', 'width=800,height=600');
+          if(botWin) {
+            botWindows.push(botWin);
+            // Cố gắng di chuyển cửa sổ theo hành động ngẫu nhiên (lưu ý: một số trình duyệt có thể chặn)
+            setInterval(() => {
+              const x = Math.floor(Math.random() * 200) - 100;
+              const y = Math.floor(Math.random() * 200) - 100;
+              try {
+                botWin.moveBy(x, y);
+              } catch (err) {
+                console.log('Không thể di chuyển cửa sổ', err);
+              }
+            }, 3000);
+            // Bạn có thể thêm các tác vụ khác như tự động "vẽ" bằng cách gửi event hoặc message nếu trang cho phép
+          }
+        }
+      });
+    </script>
+  </body>
+  </html>
+  `;
+  res.send(html);
 });
 
 app.listen(PORT, () => console.log(`API running on port ${PORT}`));
