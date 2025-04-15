@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>SolarBoard - Bảng vẽ trực tuyến</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+  <div class="wrapper">
+    <header>
+      <div class="logo">
+        <img src="/images/solarboard-logo.svg" alt="SolarBoard Logo">
+        <h1>SolarBoard</h1>
+      </div>
+      <p class="tagline">Bảng vẽ trực tuyến hợp tác</p>
+    </header>
+
+    <main>
+      <section class="create-board">
+        <h2>Tạo bảng vẽ mới</h2>
+        <div class="form-group">
+          <label>Quyền riêng tư:</label>
+          <div class="privacy-toggle">
+            <button class="privacy-option active" data-privacy="public">
+              <i class="fas fa-globe"></i> Công khai
+            </button>
+            <button class="privacy-option" data-privacy="private">
+              <i class="fas fa-lock"></i> Riêng tư
+            </button>
+          </div>
+          <p class="privacy-info">
+            <span id="public-info" class="active">Mọi người có thể tìm thấy và tham gia bảng vẽ của bạn từ trang chủ.</span>
+            <span id="private-info">Chỉ những người có liên kết mới có thể tham gia bảng vẽ của bạn.</span>
+          </p>
+        </div>
+        
+        <div class="form-group">
+          <label>Thời hạn board:</label>
+          <div class="expiration-options">
+            <button class="expiration-option" data-expires="14days">
+              <i class="fas fa-calendar-alt"></i> 14 ngày
+            </button>
+            <button class="expiration-option" data-expires="30days">
+              <i class="fas fa-calendar-alt"></i> 30 ngày
+            </button>
+            <button class="expiration-option" data-expires="3months">
+              <i class="fas fa-calendar-alt"></i> 3 tháng
+            </button>
+            <button class="expiration-option active" data-expires="never">
+              <i class="fas fa-infinity"></i> Không giới hạn
+            </button>
+          </div>
+          <p class="expiration-info">
+            <span id="expiration-info-text">Board sẽ không bị xóa tự động.</span>
+          </p>
+        </div>
+        
+        <button id="create-board-btn" class="btn btn-primary">
+          <i class="fas fa-plus"></i> Tạo bảng vẽ mới
+        </button>
+      </section>
+
+      <section class="public-boards">
+        <h2>Bảng vẽ công khai</h2>
+        <div class="boards-container" id="public-boards-list">
+          <div class="loading-spinner">
+            <i class="fas fa-spinner fa-spin"></i>
+            <p>Đang tải...</p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <p>&copy; 2025 SolarBoard - Bảng vẽ trực tuyến</p>
+    </footer>
+  </div>
+
+  <script>
+    // Store user ID in localStorage
+    let userId = localStorage.getItem('solarboard_user_id');
+    if (!userId) {
+      userId = Math.random().toString(36).substring(2, 15);
+      localStorage.setItem('solarboard_user_id', userId);
+    }
+
+    // Privacy selection
+    const privacyOptions = document.querySelectorAll('.privacy-option');
+    let isPublic = true; // Default to public
+
+    privacyOptions.forEach(option => {
+      option.addEventListener('click', function() {
+        privacyOptions.forEach(opt => opt.classList.remove('active'));
+        this.classList.add('active');
+        
+        isPublic = this.dataset.privacy === 'public';
+        
+        // Toggle privacy info text
+        document.getElementById('public-info').classList.toggle('active', isPublic);
+        document.getElementById('private-info').classList.toggle('active', !isPublic);
+      });
+    });
+
+    // Expiration selection
+    const expirationOptions = document.querySelectorAll('.expiration-option');
+    let expiresIn = 'never'; // Default to never expires
+    
+    expirationOptions.forEach(option => {
+      option.addEventListener('click', function() {
+        expirationOptions.forEach(opt => opt.classList.remove('active'));
+        this.classList.add('active');
+        
+        expiresIn = this.dataset.expires;
+        
+        // Update expiration info text
+        const expirationInfoText = document.getElementById('expiration-info-text');
+        switch(expiresIn) {
+          case '14days':
+            expirationInfoText.textContent = 'Board sẽ tự động bị xóa sau 14 ngày.';
+            break;
+          case '30days':
+            expirationInfoText.textContent = 'Board sẽ tự động bị xóa sau 30 ngày.';
+            break;
+          case '3months':
+            expirationInfoText.textContent = 'Board sẽ tự động bị xóa sau 3 tháng.';
+            break;
+          case 'never':
+          default:
+            expirationInfoText.textContent = 'Board sẽ không bị xóa tự động.';
+            break;
+        }
+      });
+    });
+
+    // Create board
+    document.getElementById('create-board-btn').addEventListener('click', async function() {
+      try {
+        const response = await fetch('/api/boards', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            isPublic,
+            userId,
+            expiresIn // Include expiration setting
+          })
+        });
+        
+        const data = await response.json();
+        
+        if (data.boardId) {
+          // Redirect to the new board
+          window.location.href = `/board/${data.boardId}`;
+        } else {
+          alert('Có lỗi xảy ra khi tạo bảng vẽ!');
+        }
+      } catch (error) {
+        console.error('Error creating board:', error);
+        alert('Có lỗi xảy ra khi tạo bảng vẽ!');
+      }
+    });
+
+    // Load public boards
+    async function loadPublicBoards() {
+      try {
+        const response = await fetch('/api/boards/public');
+        const boards = await response.json();
+        
+        const boardsList = document.getElementById('public-boards-list');
+        
+        // Clear loading spinner
+        boardsList.innerHTML = '';
+        
+        if (boards.length === 0) {
+          boardsList.innerHTML = '<p class="no-boards">Không có bảng vẽ công khai nào.</p>';
+          return;
+        }
+        
+        // Sort by creation time (newest first)
+        boards.sort((a, b) => b.createdAt - a.createdAt);
+        
+        boards.forEach(board => {
+          const boardCard = document.createElement('div');
+          boardCard.className = 'board-card';
+          
+          // Format creation time
+          const createdAt = new Date(board.createdAt);
+          const timeStr = createdAt.toLocaleString('vi-VN');
+          
+          // Xác định thông tin thời hạn
+          let expirationInfo = '';
+          if (board.expirationDate) {
+            const now = Date.now();
+            const expDate = new Date(board.expirationDate);
+            const timeLeft = board.expirationDate - now;
+            
+            if (timeLeft <= 0) {
+              expirationInfo = `<p class="expiration-tag expiring"><i class="fas fa-exclamation-circle"></i> Đã hết hạn</p>`;
+            } else {
+              // Tính số ngày còn lại
+              const daysLeft = Math.ceil(timeLeft / (1000 * 60 * 60 * 24));
+              let expirationClass = '';
+              
+              if (daysLeft <= 3) {
+                expirationClass = 'expiring';
+              } else if (daysLeft <= 7) {
+                expirationClass = 'expiring-soon';
+              }
+              
+              expirationInfo = `<p class="expiration-tag ${expirationClass}"><i class="fas fa-clock"></i> Còn ${daysLeft} ngày</p>`;
+            }
+          }
+
+          boardCard.innerHTML = `
+            <div class="board-info">
+              <h3>Bảng vẽ #${board.id.substring(0, 8)}</h3>
+              <p>Tạo lúc: ${timeStr}</p>
+              <p><i class="fas fa-users"></i> ${board.userCount} người dùng</p>
+              ${expirationInfo}
+            </div>
+            <a href="/board/${board.id}" class="btn btn-join">
+              <i class="fas fa-sign-in-alt"></i> Tham gia
+            </a>
+          `;
+          
+          boardsList.appendChild(boardCard);
+        });
+      } catch (error) {
+        console.error('Error loading public boards:', error);
+        const boardsList = document.getElementById('public-boards-list');
+        boardsList.innerHTML = '<p class="error-message">Không thể tải bảng vẽ công khai.</p>';
+      }
+    }
+
+    // Load public boards on page load and refresh every 30 seconds
+    loadPublicBoards();
+    setInterval(loadPublicBoards, 30000);
+  </script>
+</body>
+</html>

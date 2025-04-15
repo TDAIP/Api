@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>SolarBoard - Bảng vẽ trực tuyến</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+  <link rel="stylesheet" href="/css/board.css">
+</head>
+<body>
+  <div id="toolbar">
+    <div class="toolbar-group">
+      <button id="home-button" title="Quay về trang chủ"><i class="fas fa-home"></i></button>
+      <button id="undo-button" title="Hoàn tác"><i class="fas fa-undo"></i></button>
+      <button id="redo-button" title="Làm lại"><i class="fas fa-redo"></i></button>
+    </div>
+    
+    <div class="toolbar-group">
+      <button id="pen-button" class="active" title="Bút vẽ"><i class="fas fa-pen"></i></button>
+      <button id="eraser-button" title="Tẩy"><i class="fas fa-eraser"></i></button>
+      <button id="pan-button" title="Di chuyển bản vẽ"><i class="fas fa-arrows-alt"></i></button>
+      <button id="clear-button" title="Xóa tất cả"><i class="fas fa-trash"></i></button>
+    </div>
+    
+    <div class="toolbar-group">
+      <button id="download-button" title="Tải xuống"><i class="fas fa-download"></i></button>
+      <button id="share-button" title="Chia sẻ"><i class="fas fa-share-alt"></i></button>
+      <button id="users-button" title="Người dùng"><i class="fas fa-users"></i></button>
+      <button id="options-button" title="Tùy chọn"><i class="fas fa-cog"></i></button>
+    </div>
+  </div>
+
+  <div id="canvas-container">
+    <canvas id="canvas"></canvas>
+  </div>
+
+  <!-- CustomPen Menu -->
+  <div id="custom-pen-menu" class="modal custom-pen-modal">
+    <div class="modal-content">
+      <div class="modal-decorations">
+        <div class="glow-effect top-left"></div>
+        <div class="glow-effect bottom-right"></div>
+        <div class="dot-pattern"></div>
+      </div>
+      
+      <span class="close-button"><i class="fas fa-times"></i></span>
+      <h2><i class="fas fa-magic"></i> Tùy chỉnh bút vẽ</h2>
+      
+      <div class="pen-tabs">
+        <button class="tab-button active" data-tab="colors-tab">
+          <i class="fas fa-palette"></i> Màu sắc
+        </button>
+        <button class="tab-button" data-tab="size-tab">
+          <i class="fas fa-circle"></i> Kích thước
+        </button>
+      </div>
+      
+      <div id="colors-tab" class="tab-content active">
+        <div class="section-title">Chọn màu sắc cho bút vẽ</div>
+        <div class="colors-grid">
+          <button class="color-option active" data-color="#000000" style="background-color: #000000;"></button>
+          <button class="color-option" data-color="#ffffff" style="background-color: #ffffff; border: 1px solid rgba(0,0,0,0.1);"></button>
+          <button class="color-option" data-color="#6363DF" style="background-color: #6363DF;"></button>
+          <button class="color-option" data-color="#6D87EA" style="background-color: #6D87EA;"></button>
+          <button class="color-option" data-color="#7A99FA" style="background-color: #7A99FA;"></button>
+          <button class="color-option" data-color="#767BD2" style="background-color: #767BD2;"></button>
+          <button class="color-option" data-color="#ff3366" style="background-color: #ff3366;"></button>
+          <button class="color-option" data-color="#33cc99" style="background-color: #33cc99;"></button>
+          <button class="color-option" data-color="#ff9900" style="background-color: #ff9900;"></button>
+          <button class="color-option" data-color="#2196F3" style="background-color: #2196F3;"></button>
+          <button class="color-option" data-color="#E91E63" style="background-color: #E91E63;"></button>
+          <button class="color-option" data-color="#5E35B1" style="background-color: #5E35B1;"></button>
+        </div>
+        <div class="selection-info color-selection-info">
+          <div class="color-preview" id="color-preview"></div>
+          <div class="selection-label">Màu đã chọn: <span id="selected-color-name">Đen</span></div>
+        </div>
+      </div>
+      
+      <div id="size-tab" class="tab-content">
+        <div class="section-title">Chọn kích thước bút vẽ</div>
+        
+        <div class="size-slider-container">
+          <input type="range" class="size-slider" id="size-slider" min="1" max="30" step="1" value="2">
+          <div class="size-slider-labels">
+            <span>Nhỏ</span>
+            <span>Lớn</span>
+          </div>
+        </div>
+        
+        <div class="size-presets">
+          <button class="size-preset" data-size="1">XS</button>
+          <button class="size-preset" data-size="2">S</button>
+          <button class="size-preset" data-size="5">M</button>
+          <button class="size-preset" data-size="10">L</button>
+          <button class="size-preset" data-size="20">XL</button>
+        </div>
+        
+        <div class="size-grid"></div>
+        
+        <div class="selection-info">
+          <div class="size-preview-container">
+            <div class="size-preview-label">Xem trước:</div>
+            <div class="size-preview">
+              <div class="preview-dot" id="size-preview-dot"></div>
+            </div>
+          </div>
+          <div class="selection-label">Kích thước: <span id="selected-size-value">2px</span></div>
+        </div>
+      </div>
+      
+      <div class="action-buttons">
+        <button class="apply-button"><i class="fas fa-check"></i> Áp dụng</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Share Modal -->
+  <div id="share-modal" class="modal">
+    <div class="modal-content">
+      <span class="close-button">&times;</span>
+      <h2>Chia sẻ bảng vẽ</h2>
+      <p>Sao chép liên kết bên dưới để chia sẻ bảng vẽ này:</p>
+      <div class="share-link-container">
+        <input type="text" id="share-link" readonly>
+        <button id="copy-link-btn"><i class="fas fa-copy"></i> Sao chép</button>
+      </div>
+      <div class="board-info-container">
+        <div class="board-status">
+          <p id="board-status-text">Trạng thái: <span class="status"></span></p>
+        </div>
+        <div class="board-expiration">
+          <p id="board-expiration-text">
+            <i class="fas fa-clock"></i> Thời hạn: <span id="expiration-status">Không giới hạn</span>
+          </p>
+          <div class="expiration-countdown" id="expiration-countdown">
+            <!-- Hiển thị đếm ngược thời gian còn lại -->
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Users Modal -->
+  <div id="users-modal" class="modal">
+    <div class="modal-content">
+      <span class="close-button">&times;</span>
+      <h2>Người dùng trực tuyến</h2>
+      
+      <div class="user-count">
+        <i class="fas fa-users"></i> <span id="online-user-count">0</span> người dùng trực tuyến
+      </div>
+      
+      <ul id="users-list"></ul>
+      
+      <div id="admin-controls">
+        <h3><i class="fas fa-shield-alt"></i> Quản trị viên</h3>
+        <div class="admin-tools">
+          <button id="toggle-public-btn" class="admin-btn">
+            <i class="fas fa-globe"></i> Chuyển chế độ công khai
+          </button>
+          <button id="clear-all-btn" class="admin-btn danger">
+            <i class="fas fa-trash-alt"></i> Xóa tất cả nội dung
+          </button>
+        </div>
+        <p>Bạn có thể quản lý người dùng bằng cách chọn vào tên trong danh sách.</p>
+        <div class="user-management-tip">
+          <i class="fas fa-info-circle"></i>
+          <span>Mẹo: Các chức năng quản trị có thể mở rộng tùy theo nhu cầu của bạn.</span>
+        </div>
+      </div>
+      
+      <div id="blocked-users-section">
+        <h3><i class="fas fa-ban"></i> Người dùng bị chặn</h3>
+        <ul id="blocked-users-list">
+          <li class="empty-list">Chưa có người dùng nào bị chặn.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Blocked Overlay -->
+  <div id="blocked-overlay" class="overlay hidden">
+    <div class="overlay-content">
+      <h2>Bạn đã bị chặn!</h2>
+      <p id="blocked-reason">Bạn đã bị quản trị viên chặn khỏi bảng vẽ này.</p>
+    </div>
+  </div>
+
+  <!-- Not Found Overlay -->
+  <div id="not-found-overlay" class="overlay hidden">
+    <div class="overlay-content">
+      <h2>Không tìm thấy bảng vẽ!</h2>
+      <p>Bảng vẽ này không tồn tại hoặc đã bị xóa.</p>
+      <button id="go-home-btn" class="btn">Quay về trang chủ</button>
+    </div>
+  </div>
+
+  <div id="watermark">© MT Studio/NoxUI - SolarBoard</div>
+
+  <!-- Status Notification -->
+  <div id="status-notification" class="hidden">
+    <div class="status-indicator">
+      <i class="fas fa-sync-alt fa-spin"></i>
+      <span id="status-text">Đang cập nhật...</span>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/board.js"></script>
+</body>
+</html>
