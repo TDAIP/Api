@@ -1,0 +1,1717 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>SolarBoard V1.1 – SolarBoard do VTriP Official (Nox/CNV) tạo ra</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+        integrity="sha512-9usAa10IRO0HhonpyAIVpjrylPvoDwiPUiKdWk5t3PyolY1cOd4DSE0Ga+ri4AuTroPR5aQvXU9xC6qOPnzFeg=="
+        crossorigin="anonymous" referrerpolicy="no-referrer" />
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: #F2F2F7;
+    }
+    :root {
+      --primary-color: #6363DF;
+      --toolbar-bg: rgba(255,255,255,0.8);
+      --background-color: #F2F2F7;
+      --button-bg: rgba(255,255,255,0.9);
+      --button-hover-bg: rgba(255,255,255,1);
+      --border-color: rgba(0,0,0,0.1);
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+    }
+    #toolbar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 80px;
+      height: 100vh;
+      background: var(--toolbar-bg);
+      backdrop-filter: blur(20px);
+      padding: 20px 10px;
+      padding-bottom: calc(20px + var(--safe-bottom));
+      box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+      border-right: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      z-index: 100;
+    }
+    #toolbar button {
+      width: 50px;
+      height: 50px;
+      border: none;
+      border-radius: 16px;
+      background: var(--button-bg);
+      margin-bottom: 15px;
+      color: #1C1C1E;
+      font-size: 1.5em;
+      cursor: pointer;
+      transition: background 0.2s, color 0.2s, box-shadow 0.2s;
+    }
+    #toolbar button:hover {
+      background: var(--button-hover-bg);
+      color: var(--primary-color);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+    }
+    #toolbar button.active {
+      background: var(--primary-color);
+      color: #fff;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+    }
+    #options-button {
+      margin-top: auto;
+    }
+    #canvas-container {
+      position: absolute;
+      top: 0;
+      left: 80px;
+      width: calc(100vw - 80px);
+      height: 100vh;
+      background: var(--background-color);
+      cursor: grab;
+      touch-action: none;
+    }
+    #canvas-container.panning {
+      cursor: grabbing;
+    }
+    #canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      cursor: crosshair;
+      will-change: transform;
+    }
+    #watermark-text {
+      position: fixed;
+      top: 10px;
+      left: 90px;
+      font-size: 12px;
+      color: rgba(0,0,0,0.2);
+      pointer-events: none;
+      z-index: 99;
+    }
+    .pen-settings-menu {
+      position: fixed;
+      top: 100px;
+      left: 90px;
+      width: 280px;
+      background: rgba(255,255,255,0.8);
+      backdrop-filter: blur(15px);
+      border: 1px solid var(--border-color);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      padding: 15px;
+      z-index: 200;
+      border-radius: 16px;
+      transition: transform 0.3s ease, opacity 0.3s ease;
+    }
+    .pen-settings-menu.hidden {
+      transform: translateX(-20px);
+      opacity: 0;
+      pointer-events: none;
+    }
+    .pen-settings-menu .tabs {
+      display: flex;
+      justify-content: space-around;
+      border-bottom: 2px solid #eee;
+      margin-bottom: 15px;
+    }
+    .pen-settings-menu .tabs button {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 8px 10px;
+      background: transparent;
+      border: none;
+      font-size: 0.9em;
+      color: #8E8E93;
+      cursor: pointer;
+      transition: color 0.3s, font-weight 0.3s;
+    }
+    .pen-settings-menu .tabs button.active {
+      color: var(--primary-color);
+      font-weight: bold;
+    }
+    .pen-settings-menu .tabs button i {
+      font-size: 1.5em;
+      margin-bottom: 4px;
+    }
+    .pen-settings-menu .tab-content {
+      padding-top: 15px;
+    }
+    .pen-settings-menu .tab-content:not(.active) {
+      display: none;
+    }
+    .pen-settings-menu .colors-list,
+    .pen-settings-menu .sizes-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 15px;
+    }
+    .pen-settings-menu .color-option {
+      border: none;
+      background: none;
+      cursor: pointer;
+      font-size: 1.4em;
+      opacity: 0.8;
+      transition: opacity 0.2s;
+    }
+    .pen-settings-menu .color-option:hover {
+      opacity: 1;
+    }
+    #options-menu {
+      position: fixed;
+      bottom: calc(20px + var(--safe-bottom));
+      left: 50%;
+      transform: translateX(-50%);
+      width: 250px;
+      max-width: 90%;
+      background: rgba(255,255,255,0.8);
+      backdrop-filter: blur(15px);
+      border: 1px solid var(--border-color);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      padding: 15px;
+      z-index: 200;
+      border-radius: 16px;
+      transition: transform 0.3s ease, opacity 0.3s ease;
+    }
+    #options-menu.hidden {
+      transform: translateY(20px) translateX(-50%);
+      opacity: 0;
+      pointer-events: none;
+    }
+    .options-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      text-align: center;
+    }
+    .option-item {
+      background: rgba(255,255,255,0.9);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 10px;
+      cursor: pointer;
+      transition: background 0.2s;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    .option-item:hover {
+      background: var(--button-hover-bg);
+    }
+    .option-item.active {
+      background: var(--primary-color);
+      color: #fff;
+    }
+    .option-item.active i,
+    .option-item.active span {
+      color: #fff;
+    }
+    .option-item i {
+      font-size: 1.8em;
+      margin-bottom: 5px;
+    }
+    .option-item span {
+      font-size: 0.85em;
+      color: #555;
+    }
+    .size-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 10px;
+      justify-items: center;
+    }
+    .size-option {
+      width: 35px;
+      height: 35px;
+      border: 1px solid var(--border-color);
+      border-radius: 50%;
+      background: rgba(0,0,0,1);
+      transition: transform 0.2s ease;
+      cursor: pointer;
+      opacity: 0.7;
+    }
+    .size-option:hover {
+      opacity: 1;
+    }
+    .size-option.active {
+      border: 2px solid var(--primary-color);
+      transform: scale(1.1);
+      opacity: 1;
+    }
+    #update-modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0,0,0,0.5);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 300;
+    }
+    #update-modal .modal-content {
+      background: #fff;
+      padding: 20px;
+      border-radius: 16px;
+      text-align: center;
+      max-width: 90%;
+    }
+    #update-modal .modal-content h2 {
+      margin: 0 0 10px;
+      color: var(--primary-color);
+    }
+    #update-modal .modal-content p {
+      margin: 0 0 20px;
+      color: #333;
+    }
+    #update-modal .modal-content button {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 8px;
+      background: var(--primary-color);
+      color: #fff;
+      font-size: 1em;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    #update-modal .modal-content button:hover {
+      background: #005bb5;
+    }
+    @media (max-width: 768px) {
+      #toolbar {
+        width: 60px;
+        padding: 10px;
+      }
+      #toolbar button {
+        width: 40px;
+        height: 40px;
+        font-size: 1.2em;
+      }
+      #canvas-container {
+        left: 60px;
+        width: calc(100vw - 60px);
+      }
+      #watermark-text {
+        left: 70px;
+      }
+      .pen-settings-menu, #options-menu {
+        left: 50%;
+        transform: translateX(-50%);
+        width: 240px;
+      }
+    }
+    .slider-container {
+      display: flex;
+      align-items: center;
+      margin-bottom: 15px;
+    }
+    .slider-container label {
+      margin-right: 10px;
+      font-size: 0.95em;
+      color: #555;
+    }
+    .slider {
+      flex: 1;
+      -webkit-appearance: none;
+      appearance: none;
+      height: 10px;
+      background: #ddd;
+      border-radius: 6px;
+      outline: none;
+      transition: opacity .2s;
+    }
+    .slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 20px;
+      height: 20px;
+      background: var(--primary-color);
+      cursor: pointer;
+      border-radius: 50%;
+      border: none;
+      box-shadow: 0 0 3px rgba(0, 0, 0, 0.3);
+    }
+    .slider::-moz-range-thumb {
+      width: 20px;
+      height: 20px;
+      background: var(--primary-color);
+      cursor: pointer;
+      border-radius: 50%;
+      border: none;
+      box-shadow: 0 0 3px rgba(0, 0, 0, 0.3);
+    }
+    .touch-options {
+      border-top: 1px solid var(--border-color);
+      padding-top: 10px;
+    }
+    .touch-options label {
+      display: flex;
+      align-items: center;
+      font-size: 0.95em;
+      color: #555;
+      margin-bottom: 10px;
+    }
+    .touch-options input[type="checkbox"] {
+      margin-right: 8px;
+    }
+    #member-management-modal {
+      display: none;
+      position: fixed;
+      z-index: 400;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      overflow: auto;
+      background-color: rgba(0,0,0,0.4);
+    }
+
+    #member-management-modal .modal-content {
+      background-color: #fefefe;
+      margin: 15% auto;
+      padding: 20px;
+      border: 1px solid #888;
+      width: 80%;
+      border-radius: 16px;
+      max-width: 500px;
+    }
+
+    #member-management-modal .close-button {
+      color: #aaa;
+      float: right;
+      font-size: 28px;
+      font-weight: bold;
+    }
+
+    #member-management-modal .close-button:hover,
+    #member-management-modal .close-button:focus {
+      color: black;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    #member-management-modal ul {
+      list-style-type: none;
+      padding: 0;
+    }
+
+    #member-management-modal li {
+      padding: 10px 0;
+      border-bottom: 1px solid #eee;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    #member-management-modal li:last-child {
+      border-bottom: none;
+    }
+
+    #member-management-modal .user-actions {
+        position: relative;
+        display: inline-block;
+    }
+
+    #member-management-modal .user-actions button {
+      background-color: #f44336;
+      color: white;
+      border: none;
+      padding: 8px 12px;
+      text-align: center;
+      text-decoration: none;
+      display: inline-block;
+      font-size: 0.9em;
+      margin-left: 5px;
+      cursor: pointer;
+      border-radius: 8px;
+      transition: background-color 0.3s;
+    }
+
+    #member-management-modal .user-actions button:hover {
+      background-color: #da190b;
+    }
+
+    #member-management-modal .action-dropdown-content {
+      display: none;
+      position: absolute;
+      background-color: #f9f9f9;
+      min-width: 160px;
+      box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
+      padding: 8px 12px;
+      z-index: 1;
+      right: 0;
+      border-radius: 8px;
+      border: 1px solid var(--border-color);
+    }
+
+    #member-management-modal .action-dropdown-content button {
+        display: block;
+        width: 100%;
+        text-align: left;
+        margin: 5px 0;
+        border-radius: 4px;
+    }
+
+    #member-management-modal .action-dropdown-content.show {
+      display:block;
+    }
+
+    #member-management-modal h2, #member-management-modal h3 {
+        color: var(--primary-color);
+    }
+
+    #blocked-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(255, 255, 255, 0.9);
+        z-index: 500;
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
+        text-align: center;
+        padding: 20px;
+    }
+
+    #blocked-overlay.show {
+        display: flex;
+    }
+
+    #blocked-overlay h2 {
+        color: red;
+        margin-bottom: 10px;
+    }
+
+    #blocked-overlay p {
+        color: #333;
+        margin-bottom: 20px;
+    }
+
+    #server-not-found-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(255, 255, 255, 0.9);
+        z-index: 501;
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
+        text-align: center;
+        padding: 20px;
+    }
+
+    #server-not-found-overlay.show {
+        display: flex;
+    }
+
+    #server-not-found-overlay h2 {
+        color: red;
+        margin-bottom: 10px;
+    }
+
+    #server-not-found-overlay p {
+        color: #333;
+        margin-bottom: 20px;
+    }
+    #server-not-found-overlay button {
+        padding: 8px 16px;
+        border: none;
+        border-radius: 8px;
+        background: var(--primary-color);
+        color: #fff;
+        font-size: 1em;
+        cursor: pointer;
+        transition: background 0.2s;
+    }
+    #server-not-found-overlay button:hover {
+        background: #005bb5;
+    }
+
+    #quick-create-modal {
+        display: none;
+        position: fixed;
+        z-index: 400;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        overflow: auto;
+        background-color: rgba(0,0,0,0.4);
+    }
+
+    #quick-create-modal .modal-content {
+        background-color: #fefefe;
+        margin: 15% auto;
+        padding: 20px;
+        border: 1px solid #888;
+        width: 80%;
+        border-radius: 16px;
+        max-width: 500px;
+        text-align: center;
+    }
+     #quick-create-modal .modal-content h2 {
+        color: var(--primary-color);
+    }
+    #quick-create-modal .modal-content button {
+        padding: 8px 16px;
+        border: none;
+        border-radius: 8px;
+        background: var(--primary-color);
+        color: #fff;
+        font-size: 1em;
+        cursor: pointer;
+        transition: background 0.2s;
+        margin-top: 15px;
+    }
+    #quick-create-modal .modal-content button:hover {
+        background: #005bb5;
+    }
+  </style>
+</head>
+<body>
+  <div id="update-modal">
+    <div class="modal-content">
+      <h2>SolarBoard V1.1</h2>
+      <p>Bản cập nhật của SolarBoard do VTriP Official (Nox/CNV) tạo ra.<br>
+      Hiện tại, SolarBoard chưa có chế độ online.</p>
+      <button id="close-update">Đóng</button>
+    </div>
+  </div>
+
+  <div id="toolbar">
+    <button id="undo-button" title="Undo"><i class="fas fa-undo"></i></button>
+    <button id="redo-button" title="Redo"><i class="fas fa-redo"></i></button>
+    <button id="pen-button" class="active" title="Pen"><i class="fas fa-pen"></i></button>
+    <button id="eraser-button" title="Eraser"><i class="fas fa-eraser"></i></button>
+    <button id="download-button" title="Download JPG"><i class="fas fa-download"></i></button>
+    <button id="options-button" title="Options"><i class="fas fa-cog"></i></button>
+  </div>
+
+  <div id="canvas-container">
+    <canvas id="canvas"></canvas>
+  </div>
+  <div id="watermark-text">@VTriP Official - SolarBoard 1.0 Beta</div>
+
+  <div id="pen-settings-menu" class="pen-settings-menu hidden">
+    <div class="tabs">
+      <button id="tab-base" class="tab active" data-target="content-base">
+        <i class="fas fa-pen"></i>
+        <span>Base</span>
+      </button>
+      <button id="tab-size" class="tab" data-target="content-size">
+        <i class="fas fa-circle"></i>
+        <span>Size</span>
+      </button>
+      <button id="tab-stabilization" class="tab" data-target="content-stabilization">
+        <i class="fas fa-hand-sparkles"></i>
+        <span>Stabilization</span>
+      </button>
+    </div>
+    <div id="content-base" class="tab-content active">
+      <div class="colors-list">
+        <button class="color-option" data-color="#000000" title="Black">
+          <i class="fas fa-pen" style="color:#000000"></i>
+        </button>
+        <button class="color-option" data-color="#2761A3" title="Blue">
+          <i class="fas fa-pen" style="color:#2761A3"></i>
+        </button>
+        <button class="color-option" data-color="#44BDF2" title="Aqua">
+          <i class="fas fa-pen" style="color:#44BDF2"></i>
+        </button>
+        <button class="color-option" data-color="#C1086C" title="Red">
+          <i class="fas fa-pen" style="color:#C1086C"></i>
+        </button>
+        <button class="color-option" data-color="#98BA13" title="Green">
+          <i class="fas fa-pen" style="color:#98BA13"></i>
+        </button>
+        <button class="color-option" data-color="#A791E3" title="Purple">
+          <i class="fas fa-pen" style="color:#A791E3"></i>
+        </button>
+        <button class="color-option" data-color="#E5B52F" title="Yellow">
+          <i class="fas fa-pen" style="color:#E5B52F"></i>
+        </button>
+      </div>
+    </div>
+    <div id="content-size" class="tab-content">
+      <div class="sizes-list">
+        <div class="size-grid"></div>
+      </div>
+    </div>
+    <div id="content-stabilization" class="tab-content">
+      <div class="slider-container">
+        <label for="stabilization-slider">Pen Stabilization:</label>
+        <input type="range" min="1" max="10" value="1" class="slider" id="stabilization-slider">
+        <span id="stabilization-value">1</span>
+      </div>
+      <div class="touch-options">
+        <label for="touch-smoothing-checkbox">
+          <input type="checkbox" id="touch-smoothing-checkbox">
+          Hỗ trợ vẽ cảm ứng
+        </label>
+        <div class="slider-container">
+          <label for="touch-stabilization-slider">Touch Stabilization:</label>
+          <input type="range" min="1" max="10" value="1" class="slider" id="touch-stabilization-slider">
+          <span id="touch-stabilization-value">1</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="options-menu" class="pen-settings-menu hidden">
+    <div class="options-grid">
+      <div class="option-item" id="option-svgmode">
+        <i class="fas fa-adjust"></i>
+        <span>SvgMode</span>
+      </div>
+      <div class="option-item" id="option-fullscreen">
+        <i class="fas fa-expand"></i>
+        <span>Full Screen</span>
+      </div>
+      <div class="option-item" id="option-settings">
+        <i class="fas fa-cog"></i>
+        <span>Settings</span>
+      </div>
+       <div class="option-item" id="option-manage-members">
+        <i class="fas fa-users-cog"></i>
+        <span>Manage Members</span>
+      </div>
+      <div class="option-item" id="option-whodraws">
+        <i class="fas fa-user-tag"></i>
+        <span>Who Draws</span>
+      </div>
+    </div>
+  </div>
+
+  <div id="member-management-modal" class="member-management-modal hidden">
+    <div class="modal-content">
+      <span class="close-button" id="close-member-modal">×</span>
+      <h2>Member Management</h2>
+      <div id="member-list-area" style="display:block;">
+        <h3>Current Members</h3>
+        <ul id="member-list">
+        </ul>
+      </div>
+      <div id="admin-only-message" style="color: red; display:none;">
+        Admin Only Feature!
+      </div>
+    </div>
+  </div>
+
+  <div id="blocked-overlay" class="blocked-overlay hidden">
+    <h2>Bạn đã bị chặn truy cập SolarBoard!</h2>
+    <p id="blocked-reason-display"></p>
+    <p>Security By VTriP Official</p>
+  </div>
+
+  <div id="server-not-found-overlay" class="server-not-found-overlay hidden">
+    <h2>Lỗi 404: Không tìm thấy Server!</h2>
+    <p>Server ID bạn nhập không tồn tại hoặc đã bị xóa.</p>
+    <button id="close-not-found">Đóng</button>
+  </div>
+
+  <div id="quick-create-modal" class="quick-create-modal hidden">
+    <div class="modal-content">
+      <h2>Tạo Server Nhanh</h2>
+      <p>Nhấn nút bên dưới để tạo một server mới và nhận ID Server.</p>
+      <button id="create-server-button">Tạo Server</button>
+      <p id="server-id-display" style="margin-top: 10px;"></p>
+    </div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.4.0/firebase-app.js";
+    import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.4.0/firebase-analytics.js";
+    import { getDatabase, ref, push, onChildAdded, onChildRemoved, remove, child, get, set, onValue, onDisconnect } from "https://www.gstatic.com/firebasejs/11.4.0/firebase-database.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyDrEfOOneEFYQE1nXpecOubRtu4Mxog9z8",
+      authDomain: "im-a4c40.firebaseapp.com",
+      databaseURL: "https://im-a4c40-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "im-a4c40",
+      storageBucket: "im-a4c40.appspot.com",
+      messagingSenderId: "455946842328",
+      appId: "1:455946842328:web:b1f149744bbde753f6e7ad",
+      measurementId: "G-C0QF2D5SF1"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const analytics = getAnalytics(app);
+    const db = getDatabase(app);
+
+    let userId = localStorage.getItem('solarboard_user_id');
+    if (!userId) {
+      userId = Math.random().toString(36).substring(2, 15);
+      localStorage.setItem('solarboard_user_id', userId);
+    }
+    let blockedUsers = {};
+    let memberList = {};
+    let blockedReason = null;
+    let serverId = null;
+    let isAdmin = false;
+    let isServerExist = false;
+    let adminUserId = null;
+    let isQuickCreateMode = false;
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const boardIdParam = urlParams.get('board');
+    const quickCreateParam = urlParams.get('quickcreate');
+
+    if (quickCreateParam !== null) {
+        isQuickCreateMode = true;
+        document.getElementById('quick-create-modal').classList.remove('hidden');
+        document.getElementById('canvas-container').style.display = 'none';
+        document.getElementById('toolbar').style.display = 'none';
+        document.getElementById('watermark-text').style.display = 'none';
+    } else if (boardIdParam) {
+        serverId = boardIdParam;
+        const serverRef = ref(db, `servers/${serverId}`);
+        get(serverRef).then((snapshot) => {
+            if (snapshot.exists()) {
+                isServerExist = true;
+                adminUserId = snapshot.child('admin').val();
+                if (userId === adminUserId) isAdmin = true;
+                initializeBoard();
+            } else {
+                document.getElementById('server-not-found-overlay').classList.add('show');
+                document.getElementById('canvas-container').style.display = 'none';
+                document.getElementById('toolbar').style.display = 'none';
+                document.getElementById('watermark-text').style.display = 'none';
+            }
+        }).catch((error) => {
+            console.error("Error checking server:", error);
+            document.getElementById('server-not-found-overlay').classList.add('show');
+            document.getElementById('canvas-container').style.display = 'none';
+            document.getElementById('toolbar').style.display = 'none';
+            document.getElementById('watermark-text').style.display = 'none';
+        });
+    } else {
+        document.getElementById('server-not-found-overlay').classList.add('show');
+        document.getElementById('server-not-found-overlay').querySelector('h2').textContent = "Không có Server ID!";
+        document.getElementById('server-not-found-overlay').querySelector('p').textContent = "Vui lòng thêm '?board={ID Server}' vào cuối URL.";
+        document.getElementById('canvas-container').style.display = 'none';
+        document.getElementById('toolbar').style.display = 'none';
+        document.getElementById('watermark-text').style.display = 'none';
+    }
+
+    function initializeBoard() {
+        const drawingStrokesRef = ref(db, `servers/${serverId}/strokes`);
+        const blockedUsersRef = ref(db, `servers/${serverId}/blocked_users`);
+        const presenceRef = ref(db, `servers/${serverId}/presence`);
+
+        function isUserBlocked(checkUserId) {
+          return !!blockedUsers[checkUserId];
+        }
+
+        document.getElementById('close-update').addEventListener('click', function() {
+          document.getElementById('update-modal').style.display = 'none';
+        });
+        document.getElementById('close-not-found').addEventListener('click', function() {
+          document.getElementById('server-not-found-overlay').classList.remove('show');
+        });
+
+        const dpi = window.devicePixelRatio || 1;
+        let svgMode = false;
+        let guideTarget = null;
+        let confirmedPoint = null;
+        let svgAnimRequest = null;
+        const updateSpeed = 0.1;
+        const minGap = 10;
+        let drawGridOnScreen = true;
+        let whoDrawsMode = false;
+
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const canvasContainer = document.getElementById('canvas-container');
+        const penButton = document.getElementById('pen-button');
+        const eraserButton = document.getElementById('eraser-button');
+        const undoButton = document.getElementById('undo-button');
+        const redoButton = document.getElementById('redo-button');
+        const optionsButton = document.getElementById('options-button');
+        const optionsMenu = document.getElementById('options-menu');
+        const optionSvgMode = document.getElementById('option-svgmode');
+        const optionFullscreen = document.getElementById('option-fullscreen');
+        const optionSettings = document.getElementById('option-settings');
+        const downloadButton = document.getElementById('download-button');
+        const watermarkTextElement = document.getElementById('watermark-text');
+        const stabilizationSlider = document.getElementById('stabilization-slider');
+        const stabilizationValueDisplay = document.getElementById('stabilization-value');
+        const tabButtons = document.querySelectorAll('.pen-settings-menu .tabs .tab');
+        const tabContents = document.querySelectorAll('.pen-settings-menu .tab-content');
+        const penSettingsMenu = document.getElementById('pen-settings-menu');
+        const memberManagementModal = document.getElementById('member-management-modal');
+        const closeMemberModalButton = document.getElementById('close-member-modal');
+        const manageMembersOption = document.getElementById('option-manage-members');
+        const memberListArea = document.getElementById('member-list-area');
+        const memberListUl = document.getElementById('member-list');
+        const wrongKeyMessage = document.getElementById('wrong-key-message');
+        const whoDrawsOption = document.getElementById('option-whodraws');
+        const blockedOverlay = document.getElementById('blocked-overlay');
+        const blockedReasonDisplay = document.getElementById('blocked-reason-display');
+        const adminOnlyMessage = document.getElementById('admin-only-message');
+
+        let touchStabilizationEnabled = false;
+        let touchStabilizationLevel = 1;
+
+        let scale = 1, translateX = 0, translateY = 0;
+        let strokes = [];
+        let remoteStrokes = {};
+        let currentStroke = null;
+        let isDrawing = false;
+        let isPanning = false;
+        let currentTool = 'pen';
+        let penColor = 'black';
+        let penSize = 2;
+        let eraserSize = 5;
+        let lastX, lastY;
+        let actions = [], redoActions = [];
+        let penStabilizationLevel = 1;
+        let lastStabilizedPoint = null;
+
+        if (isAdmin) {
+            eraserButton.style.display = 'block'; // Show eraser for admin
+        } else {
+            eraserButton.style.display = 'none'; // Hide eraser for regular users
+        }
+
+        function resizeCanvas() {
+          const rect = canvasContainer.getBoundingClientRect();
+          canvas.width = rect.width * dpi;
+          canvas.height = rect.height * dpi;
+          canvas.style.width = rect.width + "px";
+          canvas.style.height = rect.height + "px";
+          ctx.setTransform(1, 0, 0, 1, 0, 0);
+          draw();
+        }
+        window.addEventListener('resize', resizeCanvas);
+        window.addEventListener('orientationchange', resizeCanvas);
+        resizeCanvas();
+
+        function filterPoints(points, minDist = 3) {
+          if (!points || points.length === 0) return points;
+          const filtered = [points[0]];
+          for (let i = 1; i < points.length; i++) {
+            const dx = points[i].x - filtered[filtered.length - 1].x;
+            const dy = points[i].y - filtered[filtered.length - 1].y;
+            if (Math.hypot(dx, dy) >= minDist) {
+              filtered.push(points[i]);
+            }
+          }
+          return filtered;
+        }
+
+        function drawSmoothStrokePoints(points, strokeColor, strokeWidth) {
+          if (!points || points.length < 2) return;
+          const filtered = filterPoints(points, 3);
+          if (!filtered || filtered.length < 2) return;
+          ctx.beginPath();
+          ctx.moveTo(filtered[0].x, filtered[0].y);
+          for (let i = 0; i < filtered.length - 1; i++) {
+            const p0 = i === 0 ? filtered[i] : filtered[i - 1];
+            const p1 = filtered[i];
+            const p2 = filtered[i + 1];
+            const p3 = (i + 2 < filtered.length) ? filtered[i + 2] : p2;
+            const cp1x = p1.x + (p2.x - p0.x) / 6;
+            const cp1y = p1.y + (p2.y - p0.y) / 6;
+            const cp2x = p2.x - (p3.x - p1.x) / 6;
+            const cp2y = p2.y - (p3.y - p1.y) / 6;
+            ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
+          }
+          ctx.strokeStyle = strokeColor;
+          ctx.lineWidth = strokeWidth;
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+          ctx.stroke();
+        }
+
+        function draw() {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.save();
+          ctx.scale(dpi, dpi);
+          ctx.translate(translateX, translateY);
+          ctx.scale(scale, scale);
+          if (drawGridOnScreen) {
+            drawGrid();
+          }
+          for (const strokeKey in remoteStrokes) {
+            const stroke = remoteStrokes[strokeKey];
+            if (!stroke || !stroke.points || stroke.points.length < 2 || isUserBlocked(stroke.userId)) continue;
+            drawSmoothStrokePoints(stroke.points, stroke.color, stroke.size);
+            if (whoDrawsMode && stroke.points[0]) {
+              drawUserTag(stroke.points[0], stroke.userId);
+            }
+          }
+          strokes.forEach(stroke => {
+            if (!stroke || !stroke.points || stroke.points.length < 2) return;
+            drawSmoothStrokePoints(stroke.points, stroke.color, stroke.size);
+             if (whoDrawsMode && stroke.points[0]) {
+              drawUserTag(stroke.points[0], userId);
+            }
+          });
+
+          if (svgMode && isDrawing && confirmedPoint && guideTarget) {
+            ctx.save();
+            ctx.strokeStyle = "rgba(255,0,0,0.2)";
+            ctx.lineWidth = penSize;
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.moveTo(confirmedPoint.x, confirmedPoint.y);
+            ctx.lineTo(guideTarget.x, guideTarget.y);
+            ctx.stroke();
+            ctx.restore();
+          }
+          ctx.restore();
+        }
+
+        function drawUserTag(point, uId) {
+          ctx.font = "10px sans-serif";
+          ctx.fillStyle = "rgba(0,0,0,0.5)";
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'bottom';
+          ctx.fillText(uId.substring(0,5), point.x + 5, point.y - 5);
+        }
+
+
+        function drawGrid() {
+          const gridSpacing = 50;
+          const left = -translateX / scale;
+          const top = -translateY / scale;
+          const right = left + canvasContainer.clientWidth / scale;
+          const bottom = top + canvasContainer.clientHeight / scale;
+          ctx.beginPath();
+          for (let x = Math.floor(left / gridSpacing) * gridSpacing; x < right; x += gridSpacing) {
+            ctx.moveTo(x, top);
+            ctx.lineTo(x, bottom);
+          }
+          for (let y = Math.floor(top / gridSpacing) * gridSpacing; y < bottom; y += gridSpacing) {
+            ctx.moveTo(left, y);
+            ctx.lineTo(right, y);
+          }
+          ctx.strokeStyle = "rgba(200, 200, 200, 0.5)";
+          ctx.lineWidth = 0.5;
+          ctx.stroke();
+        }
+
+        function getVirtualCoords(clientX, clientY) {
+          const rect = canvas.getBoundingClientRect();
+          return {
+            x: (clientX - rect.left - translateX) / scale,
+            y: (clientY - rect.top - translateY) / scale
+          };
+        }
+
+        function updateSvgMode() {
+          if (!isDrawing || !svgMode || !guideTarget || !confirmedPoint) {
+            cancelAnimationFrame(svgAnimRequest);
+            svgAnimRequest = null;
+            return;
+          }
+          const dx = guideTarget.x - confirmedPoint.x;
+          const dy = guideTarget.y - confirmedPoint.y;
+          const dist = Math.hypot(dx, dy);
+          if (dist > minGap) {
+            confirmedPoint.x += dx * updateSpeed;
+            confirmedPoint.y += dy * updateSpeed;
+            currentStroke.points.push({ x: confirmedPoint.x, y: confirmedPoint.y });
+          }
+          draw();
+          svgAnimRequest = requestAnimationFrame(updateSvgMode);
+        }
+
+        canvas.addEventListener('mousedown', startDrawing);
+        canvas.addEventListener('mousemove', handleDraw);
+        canvas.addEventListener('mouseup', stopDrawing);
+        canvas.addEventListener('mouseout', stopDrawing);
+        canvasContainer.addEventListener('touchstart', startDrawing, { passive: false });
+        canvasContainer.addEventListener('touchmove', handleDraw, { passive: false });
+        canvasContainer.addEventListener('touchend', stopDrawing);
+        canvasContainer.addEventListener('touchcancel', stopDrawing);
+
+        function startDrawing(e) {
+          if (isPanning || (e.touches && e.touches.length > 1) || isUserBlocked(userId)) {
+              if (isUserBlocked(userId)) { showBlockedOverlay(); return; } else return;
+          }
+          const point = getVirtualCoords(e.clientX ?? e.touches[0].clientX, e.clientY ?? e.touches[0].clientY);
+          if (currentTool === 'eraser') {
+            eraseStrokeAt(point);
+            isDrawing = true;
+            return;
+          }
+          isDrawing = true;
+          lastX = point.x;
+          lastY = point.y;
+          currentStroke = { tool: currentTool, points: [point], color: penColor, size: penSize, userId: userId };
+          strokes.push(currentStroke);
+          lastStabilizedPoint = point;
+          if (svgMode) {
+            guideTarget = { x: point.x, y: point.y };
+            confirmedPoint = { x: point.x, y: point.y };
+            if (!svgAnimRequest) svgAnimRequest = requestAnimationFrame(updateSvgMode);
+          }
+        }
+
+        function handleDraw(e) {
+          if (!isDrawing || isPanning || isUserBlocked(userId)) {
+              if (isUserBlocked(userId)) { showBlockedOverlay(); return; } else return;
+          }
+          e.preventDefault();
+          let point = getVirtualCoords(e.clientX ?? e.touches[0].clientX, e.clientY ?? e.touches[0].clientY);
+          if (!currentStroke) return;
+
+          if (currentTool === 'pen') {
+            if (e.touches && e.touches.length > 0 && touchStabilizationEnabled && touchStabilizationLevel > 1) {
+              const stabilizationFactor = 1 / touchStabilizationLevel;
+              point = {
+                x: lastStabilizedPoint.x * (1 - stabilizationFactor) + point.x * stabilizationFactor,
+                y: lastStabilizedPoint.y * (1 - stabilizationFactor) + point.y * stabilizationFactor
+              };
+              lastStabilizedPoint = point;
+            } else if (penStabilizationLevel > 1) {
+              const stabilizationFactor = 1 / penStabilizationLevel;
+              point = {
+                x: lastStabilizedPoint.x * (1 - stabilizationFactor) + point.x * stabilizationFactor,
+                y: lastStabilizedPoint.y * (1 - stabilizationFactor) + point.y * stabilizationFactor
+              };
+              lastStabilizedPoint = point;
+            }
+          }
+
+          if (currentTool === 'eraser') {
+            eraseStrokeAt(point);
+          } else {
+            if (svgMode) {
+              guideTarget = { x: point.x, y: point.y };
+            } else {
+              currentStroke.points.push(point);
+            }
+          }
+          lastX = point.x;
+          lastY = point.y;
+          draw();
+        }
+
+        function stopDrawing() {
+          if (isDrawing && currentStroke && currentStroke.points.length > 1 && !isUserBlocked(userId)) {
+            if (currentTool !== 'eraser' && svgMode) {
+              const finishInterval = setInterval(() => {
+                if (!guideTarget || !confirmedPoint) {
+                  clearInterval(finishInterval);
+                  return;
+                }
+                const dx = guideTarget.x - confirmedPoint.x;
+                const dy = guideTarget.y - confirmedPoint.y;
+                const dist = Math.hypot(dx, dy);
+                if (dist > minGap) {
+                  confirmedPoint.x += dx * updateSpeed;
+                  currentStroke.points.push({ x: confirmedPoint.x, y: confirmedPoint.y });
+                  draw();
+                } else {
+                  clearInterval(finishInterval);
+                }
+              }, 16);
+            }
+            if (currentTool !== 'eraser') {
+              actions.push({ type: 'draw', stroke: currentStroke });
+              redoActions = [];
+              const newStrokeRef = push(drawingStrokesRef, currentStroke);
+              currentStroke.firebaseKey = newStrokeRef.key;
+            }
+          }
+          isDrawing = false;
+          currentStroke = null;
+          guideTarget = null;
+          confirmedPoint = null;
+          cancelAnimationFrame(svgAnimRequest);
+          svgAnimRequest = null;
+          isPanning = false;
+          canvasContainer.classList.remove('panning');
+          draw();
+          lastStabilizedPoint = null;
+        }
+
+        let lastTouchDist = null;
+        let lastTouchCenter = null;
+        canvasContainer.addEventListener('touchstart', (e) => {
+          if (e.touches.length === 2 && !isUserBlocked(userId)) {
+            lastTouchDist = getTouchDistance(e.touches[0], e.touches[1]);
+            lastTouchCenter = getTouchCenter(e.touches[0], e.touches[1]);
+            isPanning = true;
+            canvasContainer.classList.add('panning');
+            isDrawing = false;
+          } else if (isUserBlocked(userId)) {
+              showBlockedOverlay();
+          }
+        }, { passive: false });
+        canvasContainer.addEventListener('touchmove', (e) => {
+          if (e.touches.length === 2 && !isUserBlocked(userId)) {
+            e.preventDefault();
+            isDrawing = false;
+            isPanning = true;
+            const newDist = getTouchDistance(e.touches[0], e.touches[1]);
+            const newCenter = getTouchCenter(e.touches[0], e.touches[1]);
+            const zoomFactor = newDist / lastTouchDist;
+            scale *= zoomFactor;
+            translateX = newCenter.x - zoomFactor * (lastTouchCenter.x - translateX);
+            translateY = newCenter.y - zoomFactor * (lastTouchCenter.y - translateY);
+            lastTouchDist = newDist;
+            lastTouchCenter = newCenter;
+            draw();
+          } else if (currentTool === 'eraser' && e.touches.length === 1 && !isUserBlocked(userId)) {
+            e.preventDefault();
+            const virtualPos = getVirtualCoords(e.touches[0].clientX, e.touches[0].clientY);
+            eraseStrokeAt(virtualPos);
+          } else if (e.touches.length === 1 && currentTool !== 'eraser' && !isUserBlocked(userId)) {
+            e.preventDefault();
+            isDrawing = true;
+            isPanning = false;
+            handleDraw(e);
+          } else if (isUserBlocked(userId)) {
+              showBlockedOverlay();
+          }
+        }, { passive: false });
+        canvasContainer.addEventListener('touchend', (e) => {
+          if (e.touches.length <= 1 && !isUserBlocked(userId)) {
+            isDrawing = false;
+            isPanning = false;
+            canvasContainer.classList.remove('panning');
+            draw();
+          } else if (isUserBlocked(userId)) {
+              showBlockedOverlay();
+          }
+        });
+        canvasContainer.addEventListener('touchcancel', (e) => {
+          if (!isUserBlocked(userId)) {
+            isDrawing = false;
+            isPanning = false;
+            canvasContainer.classList.remove('panning');
+          } else if (isUserBlocked(userId)) {
+              showBlockedOverlay();
+          }
+        });
+        function getTouchDistance(t1, t2) {
+          const dx = t2.clientX - t1.clientX;
+          const dy = t2.clientY - t1.clientY;
+          return Math.hypot(dx, dy);
+        }
+        function getTouchCenter(t1, t2) {
+          return { x: (t1.clientX + t2.clientX) / 2, y: (t1.clientY + t2.clientY) / 2 };
+        }
+
+        function eraseStrokeAt(virtualPoint) {
+          const tolerance = 25;
+          let erasedLocalStroke = false;
+          for (let i = strokes.length - 1; i >= 0; i--) {
+            const stroke = strokes[i];
+            if (!stroke || !stroke.points) continue;
+            if (!isAdmin && stroke.userId !== userId) continue; // Only admin can erase other's strokes with eraser
+            for (let j = 0; j < stroke.points.length; j++) {
+              const pt = stroke.points[j];
+              const d = Math.hypot(virtualPoint.x - pt.x, virtualPoint.y - pt.y);
+              if (d < tolerance) {
+                const erasedStroke = strokes.splice(i, 1)[0];
+                actions.push({ type: 'erase', stroke: erasedStroke });
+                redoActions = [];
+                draw();
+                if (erasedStroke.firebaseKey) {
+                  remove(child(drawingStrokesRef, erasedStroke.firebaseKey));
+                }
+                erasedLocalStroke = true;
+                return;
+              }
+            }
+          }
+          if (!erasedLocalStroke && isAdmin) { // Admin can erase remote strokes if local not found
+            for (const strokeKey in remoteStrokes) {
+              const stroke = remoteStrokes[strokeKey];
+              if (!stroke || !stroke.points) continue;
+              for (let j = 0; j < stroke.points.length; j++) {
+                const pt = stroke.points[j];
+                const d = Math.hypot(virtualPoint.x - pt.x, virtualPoint.y - pt.y);
+                if (d < tolerance) {
+                  remove(child(drawingStrokesRef, strokeKey));
+                  return;
+                }
+              }
+            }
+          }
+        }
+
+        optionFullscreen.addEventListener('click', () => {
+          if (!document.fullscreenElement) {
+            if (canvasContainer.requestFullscreen) {
+              canvasContainer.requestFullscreen();
+            } else if (canvasContainer.mozRequestFullScreen) {
+              canvasContainer.mozRequestFullScreen();
+            } else if (canvasContainer.webkitRequestFullscreen) {
+              canvasContainer.webkitRequestFullscreen();
+            } else if (canvasContainer.msRequestFullscreen) {
+              canvasContainer.msRequestFullscreen();
+            }
+          } else {
+            if (document.exitFullscreen) {
+              document.exitFullscreen();
+            }
+          }
+        });
+
+        optionSvgMode.addEventListener('click', function() {
+          svgMode = !svgMode;
+          this.classList.toggle('active');
+        });
+
+        optionSettings.addEventListener('click', () => {
+          alert("Mở giao diện Settings nâng cao.");
+        });
+
+        optionsButton.addEventListener('click', () => {
+          optionsMenu.classList.toggle('hidden');
+        });
+
+        penButton.addEventListener('click', () => {
+          const menu = document.getElementById('pen-settings-menu');
+          if (currentTool === 'pen') {
+            menu.classList.toggle('hidden');
+          }
+          currentTool = 'pen';
+          penButton.classList.add('active');
+          eraserButton.classList.remove('active');
+          canvasContainer.style.cursor = 'crosshair';
+          canvas.style.cursor = 'crosshair';
+          canvasContainer.classList.remove('panning');
+        });
+
+        eraserButton.addEventListener('click', () => {
+          if (isDrawing) { stopDrawing(); }
+          currentTool = 'eraser';
+          eraserButton.classList.add('active');
+          penButton.classList.remove('active');
+          canvasContainer.style.cursor = 'default';
+          canvas.style.cursor = 'default';
+          canvasContainer.classList.remove('panning');
+          document.getElementById('pen-settings-menu').classList.add('hidden');
+        });
+
+        downloadButton.addEventListener('click', downloadCanvasAsJPG);
+
+        undoButton.addEventListener('click', () => {
+          if (actions.length === 0) return;
+          const lastAction = actions.pop();
+          if (lastAction.type === 'draw') {
+            const index = strokes.findIndex(stroke => stroke === lastAction.stroke);
+            if (index !== -1) {
+                const undoneStroke = strokes.splice(index, 1)[0];
+                if (undoneStroke.firebaseKey) {
+                    remove(child(drawingStrokesRef, undoneStroke.firebaseKey));
+                }
+            }
+          } else if (lastAction.type === 'erase') {
+            strokes.push(lastAction.stroke);
+            if (lastAction.stroke.firebaseKey) {
+              push(drawingStrokesRef, lastAction.stroke);
+            }
+          }
+          redoActions.push(lastAction);
+          draw();
+        });
+
+        redoButton.addEventListener('click', () => {
+          if (redoActions.length === 0) return;
+          const action = redoActions.pop();
+          if (action.type === 'draw') {
+            strokes.push(action.stroke);
+            push(drawingStrokesRef, action.stroke);
+          } else if (action.type === 'erase') {
+            const erasedStroke = action.stroke;
+            const index = strokes.findIndex(stroke => stroke === erasedStroke);
+            if (index !== -1) {
+              const redoneStroke = strokes.splice(index, 1)[0];
+              if (redoneStroke.firebaseKey) {
+                  remove(child(drawingStrokesRef, redoneStroke.firebaseKey));
+              }
+            }
+          }
+          actions.push(action);
+          draw();
+        });
+
+        tabButtons.forEach(button => {
+          button.addEventListener('click', function() {
+            const targetContentId = this.dataset.target;
+            const isActive = this.classList.contains('active');
+            tabButtons.forEach(btn => btn.classList.remove('active'));
+            tabContents.forEach(content => content.classList.remove('active'));
+            if(isActive) {
+              penSettingsMenu.classList.add('hidden');
+            } else {
+              penSettingsMenu.classList.remove('hidden');
+              this.classList.add('active');
+              document.getElementById(targetContentId).classList.add('active');
+            }
+          });
+        });
+
+        document.querySelectorAll('.color-option').forEach(button => {
+          button.addEventListener('click', function() {
+            penColor = this.getAttribute('data-color');
+            penButton.querySelector('i').style.color = penColor;
+          });
+        });
+
+        function generateSizeGrid() {
+          const sizeGrid = document.querySelector('.size-grid');
+          sizeGrid.innerHTML = '';
+          const categorySizes = [2, 4, 6, 8, 10];
+          const numRows = 5;
+          const categoryNames = ["Finest", "Fine", "Medium", "Large", "Largest"];
+          for (let row = 0; row < numRows; row++) {
+            for (let col = 0; col < categorySizes.length; col++) {
+              const diameter = categorySizes[col];
+              const opacity = 1 - (row * 0.6 / (numRows - 1));
+              const btn = document.createElement('button');
+              btn.classList.add('size-option');
+              btn.style.width = diameter * 3 + 'px';
+              btn.style.height = diameter * 3 + 'px';
+              btn.style.backgroundColor = `rgba(0,0,0,${opacity})`;
+              btn.dataset.size = categorySizes[col];
+              btn.title = categoryNames[col] + " " + (row + 1);
+              btn.addEventListener('click', function() {
+                penSize = Number(this.dataset.size);
+                document.querySelectorAll('.size-option').forEach(el => el.classList.remove('active'));
+                this.classList.add('active');
+              });
+              sizeGrid.appendChild(btn);
+            }
+          }
+        }
+        generateSizeGrid();
+
+
+        function downloadCanvasAsJPG() {
+          drawGridOnScreen = false;
+          draw();
+          ctx.save();
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.strokeStyle = "rgba(0, 0, 0, 0.7)";
+          ctx.lineWidth = 2;
+          ctx.setLineDash([5, 5]);
+          ctx.strokeRect(0, 0, canvas.width, canvas.height);
+          ctx.setLineDash([]);
+          ctx.scale(dpi, dpi);
+          ctx.translate(translateX, translateY);
+          ctx.scale(scale, scale);
+          for (const strokeKey in remoteStrokes) {
+            const stroke = remoteStrokes[strokeKey];
+            if (!stroke || !stroke.points || stroke.points.length < 2 || isUserBlocked(stroke.userId)) continue;
+            drawSmoothStrokePoints(stroke.points, stroke.color, stroke.size);
+          }
+          strokes.forEach(stroke => {
+            if (!stroke || !stroke.points || stroke.points.length < 2) return;
+            drawSmoothStrokePoints(stroke.points, stroke.color, stroke.size);
+          });
+
+          const watermarkText = watermarkTextElement.textContent;
+          ctx.font = "16px Roboto";
+          ctx.fillStyle = "rgba(0,0,0,0.3)";
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'top';
+          ctx.fillText(watermarkText, 10, 10);
+          const imageDataURL = canvas.toDataURL('image/jpeg', 0.98);
+          const downloadLink = document.createElement('a');
+          downloadLink.href = imageDataURL;
+          downloadLink.download = 'solarboard_drawing.jpg';
+          document.body.appendChild(downloadLink);
+          downloadLink.click();
+          document.body.removeChild(downloadLink);
+          ctx.restore();
+          drawGridOnScreen = true;
+          draw();
+        }
+
+        downloadButton.addEventListener('click', downloadCanvasAsJPG);
+
+        stabilizationSlider.addEventListener('input', function() {
+          penStabilizationLevel = parseInt(this.value);
+          stabilizationValueDisplay.textContent = this.value;
+        });
+        document.getElementById('touch-smoothing-checkbox').addEventListener('change', function() {
+          touchStabilizationEnabled = this.checked;
+        });
+        document.getElementById('touch-stabilization-slider').addEventListener('input', function() {
+          touchStabilizationLevel = parseInt(this.value);
+          document.getElementById('touch-stabilization-value').textContent = this.value;
+        });
+
+        onChildAdded(drawingStrokesRef, (data) => {
+          const newStroke = data.val();
+          const strokeKey = data.key;
+          if (newStroke && !isUserBlocked(newStroke.userId)) {
+            remoteStrokes[strokeKey] = newStroke;
+            draw();
+          }
+        });
+
+         onChildRemoved(drawingStrokesRef, (data) => {
+          const strokeKey = data.key;
+          if (strokeKey) {
+            delete remoteStrokes[strokeKey];
+            draw();
+          }
+        });
+
+        onValue(blockedUsersRef, (snapshot) => {
+          blockedUsers = snapshot.val() || {};
+          draw();
+        });
+
+        onValue(presenceRef, (snapshot) => {
+            memberList = snapshot.val() || {};
+            populateMemberList();
+        });
+
+        manageMembersOption.addEventListener('click', () => {
+          if (!isAdmin) {
+            adminOnlyMessage.style.display = 'block';
+            setTimeout(() => adminOnlyMessage.style.display = 'none', 3000);
+            return;
+          }
+          optionsMenu.classList.add('hidden');
+          memberManagementModal.classList.remove('hidden');
+          populateMemberList();
+        });
+
+        closeMemberModalButton.addEventListener('click', () => {
+          memberManagementModal.classList.add('hidden');
+        });
+
+        window.addEventListener('click', (event) => {
+          if (event.target == memberManagementModal) {
+            memberManagementModal.classList.add('hidden');
+          }
+        });
+
+        async function populateMemberList() {
+          memberListUl.innerHTML = '';
+          const blockedUsersSnapshot = await get(blockedUsersRef);
+          const currentBlockedUsers = blockedUsersSnapshot.val() || {};
+
+          let memberCount = 0;
+          for (const uId in memberList) {
+              memberCount++;
+              const listItem = document.createElement('li');
+              listItem.innerHTML = `User ID: <b>${uId}</b> - Status: ${memberList[uId].state || 'Offline'}`;
+
+              const actionsDiv = document.createElement('div');
+              actionsDiv.className = 'user-actions';
+
+              const actionButton = document.createElement('button');
+              actionButton.innerHTML = '<i class="fas fa-ellipsis-v"></i>';
+              actionButton.onclick = function(event) {
+                  toggleDropdown(event, actionsDiv);
+              };
+              actionsDiv.appendChild(actionButton);
+
+              const dropdownContent = document.createElement('div');
+              dropdownContent.className = 'action-dropdown-content';
+
+              if (isAdmin) {
+                  if (currentBlockedUsers[uId]) {
+                      const unblockButton = document.createElement('button');
+                      unblockButton.textContent = 'Unblock User';
+                      unblockButton.onclick = () => unblockUser(uId);
+                      dropdownContent.appendChild(unblockButton);
+                  } else {
+                      const blockButton = document.createElement('button');
+                      blockButton.textContent = 'Block User';
+                      blockButton.onclick = () => promptBlockReason(uId);
+                      dropdownContent.appendChild(blockButton);
+                  }
+
+                  const deleteButton = document.createElement('button');
+                  deleteButton.textContent = 'Delete All Strokes';
+                  deleteButton.onclick = () => deleteAllUserStrokes(uId);
+                  dropdownContent.appendChild(deleteButton);
+              } else {
+                  const viewOnlyItem = document.createElement('button');
+                  viewOnlyItem.textContent = 'View Member Info (Admin Only)';
+                  viewOnlyItem.disabled = true;
+                  dropdownContent.appendChild(viewOnlyItem);
+              }
+              actionsDiv.appendChild(dropdownContent);
+              listItem.appendChild(actionsDiv);
+              memberListUl.appendChild(listItem);
+          }
+          if(memberCount === 0) memberListUl.innerHTML = '<li>No members online</li>';
+        }
+
+        function toggleDropdown(event, actionsDiv) {
+            event.stopPropagation();
+            const dropdownContent = actionsDiv.querySelector('.action-dropdown-content');
+            dropdownContent.classList.toggle('show');
+        }
+
+        window.onclick = function(event) {
+          if (!event.target.matches('.user-actions button')) {
+            var dropdowns = document.getElementsByClassName("action-dropdown-content");
+            for (var i = 0; i < dropdowns.length; i++) {
+              var openDropdown = dropdowns[i];
+              if (openDropdown.classList.contains('show')) {
+                openDropdown.classList.remove('show');
+              }
+            }
+          }
+        }
+
+        function promptBlockReason(targetUserId) {
+            const reason = prompt("Enter reason for blocking user:", "");
+            if (reason !== null) {
+                blockUser(targetUserId, reason);
+            }
+        }
+
+
+        function blockUser(targetUserId, reason) {
+          if(confirm(`Block user ${targetUserId}? Also delete all their strokes?`)){
+             deleteAllUserStrokes(targetUserId).then(() => {
+                set(child(blockedUsersRef, targetUserId), { blocked: true, reason: reason })
+                .then(() => {
+                  alert(`User ${targetUserId} blocked and strokes deleted. Reason: ${reason}`);
+                  populateMemberList();
+                })
+                .catch((error) => {
+                  alert(`Error blocking user: ${error.message}`);
+                });
+             });
+          } else {
+              set(child(blockedUsersRef, targetUserId), { blocked: true, reason: reason })
+                .then(() => {
+                  alert(`User ${targetUserId} blocked. Reason: ${reason}`);
+                  populateMemberList();
+                })
+                .catch((error) => {
+                  alert(`Error blocking user: ${error.message}`);
+                });
+          }
+        }
+
+         function unblockUser(targetUserId) {
+          remove(child(blockedUsersRef, targetUserId))
+            .then(() => {
+              alert(`User ${targetUserId} unblocked.`);
+              populateMemberList();
+            })
+            .catch((error) => {
+              alert(`Error unblocking user: ${error.message}`);
+            });
+        }
+
+
+        async function deleteAllUserStrokes(targetUserId) {
+          return new Promise(async (resolve) => {
+            const strokesSnapshot = await get(drawingStrokesRef);
+            strokesSnapshot.forEach(childSnapshot => {
+              const stroke = childSnapshot.val();
+              const strokeKey = childSnapshot.key;
+              if (stroke && stroke.userId === targetUserId) {
+                remove(child(drawingStrokesRef, strokeKey));
+              }
+            });
+            remoteStrokes = Object.fromEntries(Object.entries(remoteStrokes).filter(([key, stroke]) => stroke.userId !== targetUserId));
+            strokes = strokes.filter(stroke => stroke.userId !== targetUserId);
+            draw();
+            resolve();
+          });
+        }
+
+        whoDrawsOption.addEventListener('click', function() {
+          whoDrawsMode = !whoDrawsMode;
+          this.classList.toggle('active');
+          draw();
+        });
+
+
+        onValue(blockedUsersRef, (snapshot) => {
+          blockedUsers = snapshot.val() || {};
+          if (isUserBlocked(userId)) {
+              getBlockedReason();
+              showBlockedOverlay();
+          } else {
+            hideBlockedOverlay();
+            draw();
+          }
+        });
+
+        function showBlockedOverlay() {
+            blockedOverlay.classList.remove('hidden');
+        }
+
+        function hideBlockedOverlay() {
+            blockedOverlay.classList.add('hidden');
+        }
+
+        function getBlockedReason() {
+            const blockedUserInfo = blockedUsers[userId];
+            blockedReason = blockedUserInfo ? blockedUserInfo.reason : "Không rõ lý do.";
+            blockedReasonDisplay.textContent = blockedReason;
+        }
+
+        get(blockedUsersRef).then((snapshot) => {
+          if (snapshot.exists()) {
+            blockedUsers = snapshot.val() || {};
+             if (isUserBlocked(userId)) {
+                getBlockedReason();
+                showBlockedOverlay();
+            }
+            draw();
+          }
+        });
+
+        const presenceStatusRef = ref(db, `servers/${serverId}/presence/${userId}/state`);
+        const isOfflineForDatabaseRef = ref(db, `.info/connected`);
+        onValue(isOfflineForDatabaseRef, (snapshot) => {
+          if (snapshot.val() === false) {
+            return;
+          };
+          onDisconnect(presenceStatusRef).remove().then(() => {
+            set(presenceStatusRef, 'offline');
+          });
+        });
+        set(presenceStatusRef, 'online');
+    }
+
+
+    document.getElementById('create-server-button').addEventListener('click', () => {
+        const newServerId = Math.random().toString(36).substring(2, 15);
+        const serversRef = ref(db, 'servers');
+        set(child(serversRef, newServerId), {
+            admin: userId,
+            createdAt: Date.now()
+        }).then(() => {
+            document.getElementById('server-id-display').textContent = `Server ID của bạn là: ${newServerId}. Chia sẻ ID này để mời người khác!`;
+            document.getElementById('create-server-button').style.display = 'none';
+        }).catch((error) => {
+            console.error("Error creating server:", error);
+            alert("Không thể tạo server. Vui lòng thử lại sau.");
+        });
+    });
+
+    document.getElementById('close-not-found').addEventListener('click', () => {
+        document.getElementById('server-not-found-overlay').classList.add('hidden');
+        document.getElementById('quick-create-modal').classList.remove('hidden');
+    });
+
+  </script>
+</body>
+</html>
