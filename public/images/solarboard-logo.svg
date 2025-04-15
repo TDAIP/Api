@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="120" height="120" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
+  <!-- Outer circle -->
+  <circle cx="60" cy="60" r="57" fill="#ff6b00" stroke="#e05c00" stroke-width="2"/>
+  
+  <!-- Inner sun rays -->
+  <g stroke="#fff" stroke-width="4" stroke-linecap="round">
+    <line x1="60" y1="22" x2="60" y2="38" />
+    <line x1="60" y1="82" x2="60" y2="98" />
+    <line x1="22" y1="60" x2="38" y2="60" />
+    <line x1="82" y1="60" x2="98" y2="60" />
+    <line x1="33" y1="33" x2="45" y2="45" />
+    <line x1="75" y1="75" x2="87" y2="87" />
+    <line x1="33" y1="87" x2="45" y2="75" />
+    <line x1="75" y1="45" x2="87" y2="33" />
+  </g>
+  
+  <!-- Canvas / board -->
+  <rect x="40" y="40" width="40" height="40" fill="#fff" rx="3" ry="3" />
+  
+  <!-- Pen/brush stroke -->
+  <path d="M45 60 Q55 35, 75 65" stroke="#333" stroke-width="3" fill="none" stroke-linecap="round" />
+</svg>
