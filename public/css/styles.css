@@ -342,29 +342,6 @@ h2::after {
   box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
   position: relative;
   overflow: hidden;
-  gap: 15px;
-}
-
-.board-preview {
-  width: 120px;
-  height: 80px;
-  border-radius: 8px;
-  overflow: hidden;
-  flex-shrink: 0;
-  background-color: var(--dark-color-4);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  position: relative;
-}
-
-.board-thumbnail {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  transition: transform 0.3s ease;
-}
-
-.board-card:hover .board-thumbnail {
-  transform: scale(1.05);
 }
 
 .board-card::before {
@@ -382,10 +359,6 @@ h2::after {
   box-shadow: 0 5px 20px rgba(0, 0, 0, 0.3);
   transform: translateY(-2px);
   border-color: rgba(122, 153, 250, 0.3);
-}
-
-.board-info {
-  flex: 1;
 }
 
 .board-info h3 {
