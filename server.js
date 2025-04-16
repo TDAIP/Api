@@ -47,10 +47,12 @@ app.post('/api/boards', express.json(), (req, res) => {
   // Calculate expiration date based on expiresIn parameter
   const expirationDate = calculateExpirationDate(expiresIn);
   
+  // Store the original expiresIn setting so we can recover it if needed
   boards[boardId] = {
     isPublic: isPublic === true,
     createdAt: Date.now(),
     expirationDate: expirationDate,
+    expiresIn: expiresIn, // Lưu giá trị ban đầu của expiresIn
     strokes: [],
     admin: userId,
     users: {},
@@ -138,6 +140,7 @@ io.on('connection', (socket) => {
       blockedUsers: boards[boardId].blockedUsers,
       isAdmin: userId === boards[boardId].admin,
       expirationDate: boards[boardId].expirationDate,
+      expiresIn: boards[boardId].expiresIn, // Gửi cả thông tin expiresIn
       createdAt: boards[boardId].createdAt
     });
     
