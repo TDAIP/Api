@@ -73,6 +73,65 @@ function createDrawingEffect(x, y, type) {
   }, 1000);
 }
 
+// Mảng để theo dõi các điểm vẽ gần nhau
+let recentPoints = [];
+const pointHistoryMax = 5; // Số điểm tối đa lưu trong lịch sử
+
+// Hàm tính toán độ cong của đường vẽ
+function calculateCurvature(points) {
+  if (points.length < 3) return 0;
+  
+  // Lấy 3 điểm gần nhất để tính toán
+  const p1 = points[points.length - 3];
+  const p2 = points[points.length - 2];
+  const p3 = points[points.length - 1];
+  
+  // Tính góc giữa các vector p1->p2 và p2->p3
+  const v1 = { x: p2.x - p1.x, y: p2.y - p1.y };
+  const v2 = { x: p3.x - p2.x, y: p3.y - p2.y };
+  
+  // Tính độ lớn của vector
+  const len1 = Math.sqrt(v1.x * v1.x + v1.y * v1.y);
+  const len2 = Math.sqrt(v2.x * v2.x + v2.y * v2.y);
+  
+  // Tránh chia cho 0
+  if (len1 === 0 || len2 === 0) return 0;
+  
+  // Tính dot product và góc
+  const dot = (v1.x * v2.x + v1.y * v2.y) / (len1 * len2);
+  // Giới hạn dot product trong khoảng [-1, 1] để tránh lỗi toán học
+  const clampedDot = Math.max(-1, Math.min(1, dot));
+  const angle = Math.acos(clampedDot);
+  
+  // Trả về độ cong (angle/PI để chuẩn hóa về khoảng [0, 1])
+  return angle / Math.PI;
+}
+
+// Tính toán vận tốc vẽ
+function calculateDrawingSpeed(points, timeWindow = 200) {
+  if (points.length < 2) return 0;
+  
+  const now = Date.now();
+  // Lọc các điểm trong khoảng thời gian xác định
+  const recentPoints = points.filter(p => p.timestamp && now - p.timestamp < timeWindow);
+  
+  if (recentPoints.length < 2) return 0;
+  
+  // Tính tổng khoảng cách
+  let totalDistance = 0;
+  for (let i = 1; i < recentPoints.length; i++) {
+    const dx = recentPoints[i].x - recentPoints[i-1].x;
+    const dy = recentPoints[i].y - recentPoints[i-1].y;
+    totalDistance += Math.sqrt(dx*dx + dy*dy);
+  }
+  
+  // Tính thời gian từ điểm đầu đến điểm cuối
+  const timeElapsed = recentPoints[recentPoints.length-1].timestamp - recentPoints[0].timestamp;
+  
+  // Trả về tốc độ (pixel/ms)
+  return timeElapsed > 0 ? totalDistance / timeElapsed : 0;
+}
+
 function startDrawing(e) {
   // Skip drawing if we're panning or using pan tool
   if (isPanning || currentTool === 'pan') return;
@@ -81,6 +140,20 @@ function startDrawing(e) {
   isDrawing = true;
   lastX = point.x;
   lastY = point.y;
+  
+  // Reset lịch sử điểm
+  recentPoints = [];
+  
+  // Thêm timestamp để tính toán vận tốc vẽ
+  const pointWithTime = { 
+    x: point.x, 
+    y: point.y,
+    timestamp: Date.now(),
+    pressure: e.pressure || 0.5  // Sử dụng áp lực nếu có (hỗ trợ bút) hoặc giá trị mặc định
+  };
+  
+  // Thêm vào lịch sử điểm
+  recentPoints.push(pointWithTime);
   
   // Get screen coordinates for visual effect
   let clientX, clientY;
@@ -98,19 +171,20 @@ function startDrawing(e) {
   if (currentTool === 'eraser') {
     eraseAt(point);
   } else if (currentTool === 'pen') {
-    // Start new stroke with UUID
+    // Tạo stroke mới với UUID
     currentStroke = {
-      id: self.crypto.randomUUID(), // Generate client-side UUID
+      id: self.crypto.randomUUID(), // Tạo UUID phía client
       tool: currentTool,
       color: penColor,
       size: penSize,
-      points: [{ x: point.x, y: point.y }],
-      userId
+      points: [pointWithTime], // Bao gồm thời gian để tính toán độ mượt
+      userId,
+      timestamp: Date.now()
     };
     
     socket.emit('draw-stroke', currentStroke);
     strokes.push(currentStroke);
-    redoStack = []; // Clear redo stack on new stroke
+    redoStack = []; // Xóa stack redo khi vẽ nét mới
   }
 }
 
@@ -169,72 +243,88 @@ function draw(e) {
   if (currentTool === 'eraser') {
     eraseAt(point);
   } else {
-    // Thêm điểm mới vào nét vẽ hiện tại
-    currentStroke.points.push({ x: point.x, y: point.y });
-    
-    // Vẽ đường cong Bézier mượt mà
-    ctx.save();
-    applyTransform();
-    
-    // Thiết lập thuộc tính vẽ
-    ctx.strokeStyle = currentStroke.color;
-    ctx.lineWidth = currentStroke.size;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    
-    // Vẽ nét mới nhất
+    // Nếu điểm quá gần với điểm cuối cùng, bỏ qua để giảm số lượng điểm gửi đi
+    // và tăng hiệu suất
     const points = currentStroke.points;
-    const len = points.length;
+    const lastPoint = points[points.length - 1];
+    const distanceToLastPoint = Math.hypot(lastPoint.x - point.x, lastPoint.y - point.y);
     
-    // Xóa và vẽ lại toàn bộ nét vẽ hiện tại để đảm bảo tính liên tục của đường cong
-    if (len > 2) {
-      ctx.beginPath();
-      ctx.moveTo(points[0].x, points[0].y);
+    // Chỉ thêm điểm mới nếu khoảng cách đủ lớn hoặc là điểm đầu tiên sau điểm bắt đầu
+    if (distanceToLastPoint >= 2 / scale || points.length <= 1) {
+      // Thêm điểm mới vào nét vẽ hiện tại 
+      currentStroke.points.push({ x: point.x, y: point.y });
       
-      // Sử dụng đường cong Bézier quadratic nếu đủ điểm
-      if (len === 3) {
-        // Chỉ có 3 điểm - vẽ 1 đường cong quadratic đơn giản
-        ctx.quadraticCurveTo(points[1].x, points[1].y, points[2].x, points[2].y);
-      } else {
-        // Sử dụng đường cong Bézier mượt mà
-        for (let i = 1; i < len - 2; i++) {
-          // Tính điểm trung bình giữa 2 điểm lân cận để làm điểm kiểm soát
-          const xc = (points[i].x + points[i+1].x) / 2;
-          const yc = (points[i].y + points[i+1].y) / 2;
-          
-          // Sử dụng điểm trước đó và điểm trung bình làm điểm kiểm soát và điểm đích
-          ctx.quadraticCurveTo(points[i].x, points[i].y, xc, yc);
+      // Vẽ đường cong Bézier mượt mà
+      ctx.save();
+      applyTransform();
+      
+      // Thiết lập thuộc tính vẽ
+      ctx.strokeStyle = currentStroke.color;
+      ctx.lineWidth = currentStroke.size;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      
+      // Vẽ nét mới nhất
+      const len = points.length;
+      
+      // Cải thiện hiệu suất bằng cách không xóa và vẽ lại toàn bộ nét
+      // mà chỉ vẽ phần mới thêm vào (đường thẳng hoặc đường cong ngắn)
+      if (len >= 3) {
+        const startIdx = Math.max(0, len - 3);
+        
+        ctx.beginPath();
+        ctx.moveTo(points[startIdx].x, points[startIdx].y);
+        
+        if (len - startIdx === 3) {
+          // Vẽ đường cong quadratic cho 3 điểm
+          ctx.quadraticCurveTo(
+            points[startIdx + 1].x, points[startIdx + 1].y,
+            points[startIdx + 2].x, points[startIdx + 2].y
+          );
+        } else {
+          // Vẽ đoạn đường thẳng hoặc đường cong ngắn
+          for (let i = startIdx + 1; i < len; i++) {
+            ctx.lineTo(points[i].x, points[i].y);
+          }
         }
         
-        // Đoạn cuối cùng
-        ctx.quadraticCurveTo(
-          points[len-2].x, points[len-2].y,
-          points[len-1].x, points[len-1].y
-        );
+        ctx.stroke();
+      } else if (len === 2) {
+        // Nếu chỉ có 2 điểm, vẽ đường thẳng
+        ctx.beginPath();
+        ctx.moveTo(points[0].x, points[0].y);
+        ctx.lineTo(points[1].x, points[1].y);
+        ctx.stroke();
       }
       
-      ctx.stroke();
-    } else if (len === 2) {
-      // Nếu chỉ có 2 điểm, vẽ đường thẳng
-      ctx.beginPath();
-      ctx.moveTo(points[0].x, points[0].y);
-      ctx.lineTo(points[1].x, points[1].y);
-      ctx.stroke();
-    }
-    
-    ctx.restore();
-    
-    // Thêm hiệu ứng hạt cho bút vẽ
-    createParticle(clientX, clientY, currentStroke.color);
-    
-    // Cập nhật lên server
-    showUpdateNotification();
-    
-    // Để tối ưu hiệu suất, chỉ gửi nét vẽ lên server theo chu kỳ
-    // thay vì gửi mỗi khi có điểm mới
-    if (Date.now() - (currentStroke.lastEmit || 0) > 30) { // 30ms (30 lần/giây)
-      socket.emit('draw-stroke', currentStroke);
-      currentStroke.lastEmit = Date.now();
+      ctx.restore();
+      
+      // Thêm hiệu ứng hạt cho bút vẽ khi thực sự vẽ
+      createParticle(clientX, clientY, currentStroke.color);
+      
+      // Cập nhật lên server - Cải thiện tần suất đồng bộ
+      showUpdateNotification();
+      
+      // Thiết lập khoảng thời gian động cho việc đồng bộ dựa trên tốc độ vẽ và số lượng điểm
+      const now = Date.now();
+      const timeSinceLastEmit = now - (currentStroke.lastEmit || 0);
+      const pointsSinceLastEmit = (currentStroke.lastEmitPointCount || 0);
+      
+      // Tăng số điểm đã thêm từ lần gửi cuối
+      currentStroke.lastEmitPointCount = (currentStroke.lastEmitPointCount || 0) + 1;
+      
+      // Gửi dữ liệu trong các trường hợp sau:
+      // 1. Đã vượt quá thời gian tối đa cho phép (20ms = 50 lần/giây)
+      // 2. Đã tích lũy quá nhiều điểm (5 điểm)
+      // 3. Điều kiện kết hợp thời gian và số điểm
+      if (timeSinceLastEmit > 20 || 
+          pointsSinceLastEmit >= 5 ||
+          (timeSinceLastEmit > 10 && pointsSinceLastEmit >= 3)) {
+        
+        socket.emit('draw-stroke', currentStroke);
+        currentStroke.lastEmit = now;
+        currentStroke.lastEmitPointCount = 0;
+      }
     }
   }
   
@@ -243,6 +333,33 @@ function draw(e) {
 }
 
 function stopDrawing() {
+  if (isDrawing && currentTool === 'pen' && currentStroke) {
+    // Đảm bảo stroke hiện tại được gửi lên server trước khi kết thúc
+    if (currentStroke.points && currentStroke.points.length > 1) {
+      // Gửi stroke cuối cùng đến server
+      socket.emit('draw-stroke', currentStroke);
+      
+      // Đảm bảo stroke được thêm vào mảng strokes nếu chưa
+      let strokeAlreadyAdded = false;
+      for (let i = 0; i < strokes.length; i++) {
+        if (strokes[i].id === currentStroke.id) {
+          strokeAlreadyAdded = true;
+          // Cập nhật nếu đã tồn tại
+          strokes[i] = { ...currentStroke };
+          break;
+        }
+      }
+      
+      // Nếu chưa được thêm vào mảng strokes, thêm vào
+      if (!strokeAlreadyAdded) {
+        strokes.push({ ...currentStroke });
+      }
+      
+      // Vẽ lại canvas để đảm bảo hiển thị đúng
+      redrawCanvas();
+    }
+  }
+  
   isDrawing = false;
   currentStroke = null;
 }
@@ -326,11 +443,64 @@ function applyTransform() {
   ctx.scale(scale, scale);
 }
 
+// Biến để theo dõi thời gian render cuối cùng
+let lastRenderTime = 0;
+let pendingRedraw = false;
+let offscreenCanvas = null;
+let offscreenCtx = null;
+
+// Khởi tạo canvas offscreen cho hiệu suất tốt hơn
+function initOffscreenCanvas() {
+  offscreenCanvas = document.createElement('canvas');
+  offscreenCanvas.width = canvas.width;
+  offscreenCanvas.height = canvas.height;
+  offscreenCtx = offscreenCanvas.getContext('2d');
+}
+
+// Hàm redraw tối ưu hóa với throttling và offscreen canvas
 function redrawCanvas() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const now = Date.now();
   
-  ctx.save();
-  applyTransform();
+  // Nếu chưa có offscreen canvas, khởi tạo nó
+  if (!offscreenCanvas) {
+    initOffscreenCanvas();
+  }
+  
+  // Đảm bảo kích thước offscreen canvas luôn đúng
+  if (offscreenCanvas.width !== canvas.width || offscreenCanvas.height !== canvas.height) {
+    offscreenCanvas.width = canvas.width;
+    offscreenCanvas.height = canvas.height;
+  }
+  
+  // Nếu đã có redraw đang chờ xử lý hoặc thời gian từ lần render cuối quá ngắn, hoãn việc vẽ
+  if (pendingRedraw || (now - lastRenderTime < 16 && !isDrawing)) { // 60fps = ~16ms/frame
+    if (!pendingRedraw) {
+      pendingRedraw = true;
+      
+      // Xếp lịch vẽ lại trong frame tiếp theo
+      requestAnimationFrame(() => {
+        pendingRedraw = false;
+        lastRenderTime = Date.now();
+        performRedraw();
+      });
+    }
+    return;
+  }
+  
+  // Nếu không có redraw đang chờ, thực hiện ngay
+  lastRenderTime = now;
+  performRedraw();
+}
+
+// Thực hiện việc vẽ thực tế - được tách ra để tối ưu hóa
+function performRedraw() {
+  // Vẽ trên offscreen canvas
+  offscreenCtx.clearRect(0, 0, offscreenCanvas.width, offscreenCanvas.height);
+  
+  offscreenCtx.save();
+  // Áp dụng transform cho offscreen
+  offscreenCtx.translate(translateX, translateY);
+  offscreenCtx.scale(scale, scale);
   
   // Vẽ lại tất cả các nét vẽ
   strokes.forEach(stroke => {
@@ -338,47 +508,59 @@ function redrawCanvas() {
     if (!points || points.length < 2) return;
     
     // Thiết lập thuộc tính vẽ
-    ctx.beginPath();
-    ctx.strokeStyle = stroke.color;
-    ctx.lineWidth = stroke.size;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
+    offscreenCtx.beginPath();
+    offscreenCtx.strokeStyle = stroke.color;
+    offscreenCtx.lineWidth = stroke.size;
+    offscreenCtx.lineCap = 'round';
+    offscreenCtx.lineJoin = 'round';
     
     const len = points.length;
-    ctx.moveTo(points[0].x, points[0].y);
+    offscreenCtx.moveTo(points[0].x, points[0].y);
     
-    // Áp dụng đường cong Bézier cho nét vẽ có nhiều hơn 2 điểm
+    // Tối ưu hóa đường cong Bézier cho hiệu suất tốt hơn
+    // Sử dụng phương pháp lấy mẫu thưa hơn cho các nét dài
+    const samplingRate = len > 100 ? Math.max(1, Math.floor(len / 100)) : 1;
+    
     if (len > 2) {
-      // Đối với 3 điểm, sử dụng đường cong quadratic đơn giản
       if (len === 3) {
-        ctx.quadraticCurveTo(points[1].x, points[1].y, points[2].x, points[2].y);
+        // Chỉ có 3 điểm - sử dụng quadratic curve
+        offscreenCtx.quadraticCurveTo(points[1].x, points[1].y, points[2].x, points[2].y);
+      } else if (samplingRate > 1) {
+        // Đối với nét vẽ dài, sử dụng lấy mẫu thưa để cải thiện hiệu suất
+        for (let i = samplingRate; i < len; i += samplingRate) {
+          offscreenCtx.lineTo(points[i].x, points[i].y);
+        }
+        // Đảm bảo điểm cuối cùng luôn được vẽ
+        if ((len - 1) % samplingRate !== 0) {
+          offscreenCtx.lineTo(points[len - 1].x, points[len - 1].y);
+        }
       } else {
-        // Sử dụng kỹ thuật Bézier mượt mà cho nhiều điểm
+        // Đối với nét vẽ thông thường, sử dụng đường cong Bézier mượt mà
         for (let i = 1; i < len - 2; i++) {
-          // Tính điểm trung bình giữa các điểm lân cận để làm điểm điều khiển
           const xc = (points[i].x + points[i+1].x) / 2;
           const yc = (points[i].y + points[i+1].y) / 2;
-          
-          // Vẽ đường cong từ điểm hiện tại đến điểm trung bình,
-          // sử dụng điểm hiện tại làm điểm điều khiển
-          ctx.quadraticCurveTo(points[i].x, points[i].y, xc, yc);
+          offscreenCtx.quadraticCurveTo(points[i].x, points[i].y, xc, yc);
         }
         
-        // Vẽ đoạn cuối cùng đến điểm cuối
-        ctx.quadraticCurveTo(
+        // Đoạn cuối cùng
+        offscreenCtx.quadraticCurveTo(
           points[len-2].x, points[len-2].y,
           points[len-1].x, points[len-1].y
         );
       }
     } else {
-      // Đối với 2 điểm, chỉ vẽ đường thẳng
-      ctx.lineTo(points[1].x, points[1].y);
+      // Chỉ có 2 điểm - vẽ đường thẳng
+      offscreenCtx.lineTo(points[1].x, points[1].y);
     }
     
-    ctx.stroke();
+    offscreenCtx.stroke();
   });
   
-  ctx.restore();
+  offscreenCtx.restore();
+  
+  // Sao chép từ offscreen sang canvas chính
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(offscreenCanvas, 0, 0);
 }
 
 // Math utility for eraser
@@ -827,30 +1009,56 @@ function showShareModal() {
   boardStatus.className = 'status ' + (boardInfo.isPublic ? 'public' : 'private');
   
   // Hiển thị thông tin thời hạn
-  if (boardInfo.expirationDate) {
+  if (boardInfo.expiresIn && boardInfo.expiresIn !== 'never') {
     const now = Date.now();
-    const expDate = new Date(boardInfo.expirationDate);
-    const timeLeft = boardInfo.expirationDate - now;
     
-    // Kiểm tra nếu đã hết hạn
-    if (timeLeft <= 0) {
-      expirationStatus.textContent = 'Đã hết hạn';
-      expirationCountdown.innerHTML = 'Board này đã quá hạn và có thể bị xóa bất kỳ lúc nào.';
-    } else {
-      // Định dạng thời gian còn lại
-      const days = Math.floor(timeLeft / (1000 * 60 * 60 * 24));
-      const hours = Math.floor((timeLeft % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-      const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
-      
-      // Hiển thị ngày hết hạn
-      expirationStatus.textContent = expDate.toLocaleDateString('vi-VN');
-      
-      // Hiển thị đếm ngược
-      expirationCountdown.innerHTML = `<i class="fas fa-hourglass-half"></i> Còn lại: ${days} ngày ${hours} giờ ${minutes} phút`;
+    // Nếu có expirationDate, sử dụng giá trị đó
+    // Nếu không, tính toán lại từ expiresIn và createdAt
+    let expirationDate = boardInfo.expirationDate;
+    let expText = '';
+    
+    if (!expirationDate && boardInfo.createdAt) {
+      // Tính toán expirationDate từ createdAt và expiresIn
+      switch(boardInfo.expiresIn) {
+        case '14days':
+          expirationDate = boardInfo.createdAt + (14 * 24 * 60 * 60 * 1000);
+          expText = '14 ngày';
+          break;
+        case '30days':
+          expirationDate = boardInfo.createdAt + (30 * 24 * 60 * 60 * 1000);
+          expText = '30 ngày';
+          break;
+        case '3months':
+          expirationDate = boardInfo.createdAt + (90 * 24 * 60 * 60 * 1000);
+          expText = '3 tháng';
+          break;
+      }
     }
     
-    // Hiển thị phần đếm ngược
-    expirationCountdown.style.display = 'block';
+    if (expirationDate) {
+      const expDate = new Date(expirationDate);
+      const timeLeft = expirationDate - now;
+      
+      // Kiểm tra nếu đã hết hạn
+      if (timeLeft <= 0) {
+        expirationStatus.textContent = 'Đã hết hạn';
+        expirationCountdown.innerHTML = 'Board này đã quá hạn và có thể bị xóa bất kỳ lúc nào.';
+      } else {
+        // Định dạng thời gian còn lại
+        const days = Math.floor(timeLeft / (1000 * 60 * 60 * 24));
+        const hours = Math.floor((timeLeft % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
+        
+        // Hiển thị thông tin thời hạn
+        expirationStatus.textContent = `${expText} (hết hạn: ${expDate.toLocaleDateString('vi-VN')})`;
+        
+        // Hiển thị đếm ngược
+        expirationCountdown.innerHTML = `<i class="fas fa-hourglass-half"></i> Còn lại: ${days} ngày ${hours} giờ ${minutes} phút`;
+      }
+      
+      // Hiển thị phần đếm ngược
+      expirationCountdown.style.display = 'block';
+    }
   } else {
     // Không có thời hạn
     expirationStatus.textContent = 'Không giới hạn';
@@ -1302,6 +1510,19 @@ function initSocket() {
   
   socket.on('connect_error', (error) => {
     console.error('Socket.IO connection error:', error);
+    
+    // Hiển thị thông báo yêu cầu reload khi mất kết nối websocket
+    showConnectionErrorModal();
+  });
+  
+  // Sự kiện khi mất kết nối
+  socket.on('disconnect', (reason) => {
+    console.error('Socket.IO disconnected:', reason);
+    
+    // Nếu lý do không phải do người dùng chủ động ngắt kết nối, hiển thị thông báo
+    if (reason !== 'io client disconnect') {
+      showConnectionErrorModal();
+    }
   });
 
   // Get initial board state
@@ -1310,6 +1531,7 @@ function initSocket() {
     boardInfo.users = data.users || {};
     boardInfo.isPublic = data.isPublic;
     boardInfo.expirationDate = data.expirationDate;
+    boardInfo.expiresIn = data.expiresIn || 'never'; // Lưu lại giá trị expiresIn
     boardInfo.createdAt = data.createdAt;
     isAdmin = data.isAdmin;
     
@@ -1324,6 +1546,8 @@ function initSocket() {
     if (isAdmin) {
       document.getElementById('clear-button').style.display = 'flex';
     }
+    
+    // (Meta tags đã được cập nhật tự động trên server)
     
     redrawCanvas();
     
@@ -1493,12 +1717,26 @@ function setupDrawingEvents() {
   let lastTouches = null;
   let pinchDistance = 0;
   
+  // Biến để theo dõi di chuyển của touch
+  let touchStartTime = 0;
+  let touchStartX = 0;
+  let touchStartY = 0;
+  let minMovementToStartDrawing = 5; // Số pixel tối thiểu để bắt đầu vẽ (phân biệt chạm và vẽ)
+  let touchStarted = false; // Theo dõi xem đã thực sự bắt đầu vẽ chưa
+  
   canvasContainer.addEventListener('touchstart', (e) => {
     if (e.touches.length === 1) {
-      // Single touch - drawing
+      // Single touch - LƯU Ý: không bắt đầu vẽ ngay
       if (!e.target.closest('.toolbar-group, .modal, .side-panel')) {
         e.preventDefault();
-        startDrawing(e);
+        
+        // Lưu thời điểm bắt đầu chạm
+        touchStartTime = Date.now();
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+        touchStarted = false; // Chưa bắt đầu vẽ, chỉ đang chạm
+        
+        // Không gọi startDrawing() ở đây để tránh điểm vẽ khi chỉ chạm
       }
     } else if (e.touches.length === 2) {
       // Two fingers - pinch zoom or pan
@@ -1541,21 +1779,40 @@ function setupDrawingEvents() {
   canvasContainer.addEventListener('touchmove', (e) => {
     if (e.touches.length === 1) {
       if (isDrawing) {
+        // Đã đang vẽ, tiếp tục vẽ
         e.preventDefault();
         draw(e);
       } else if (!e.target.closest('.toolbar-group, .modal, .side-panel')) {
-        // Touch panning when not drawing
         e.preventDefault();
         const touch = e.touches[0];
         
-        if (!isPanning) {
-          isPanning = true;
-          panStartX = touch.clientX - translateX;
-          panStartY = touch.clientY - translateY;
-        } else {
-          translateX = touch.clientX - panStartX;
-          translateY = touch.clientY - panStartY;
-          redrawCanvas();
+        // Tính khoảng cách di chuyển so với điểm bắt đầu touch
+        const moveX = Math.abs(touch.clientX - touchStartX);
+        const moveY = Math.abs(touch.clientY - touchStartY);
+        const totalMovement = Math.sqrt(moveX * moveX + moveY * moveY);
+        
+        // Nếu chưa bắt đầu vẽ và người dùng đã di chuyển đủ xa để xác định là muốn vẽ
+        if (!touchStarted && !isPanning && 
+            currentTool !== 'pan' && 
+            totalMovement >= minMovementToStartDrawing && 
+            Date.now() - touchStartTime < 300) { // Chỉ xem xét cử chỉ vẽ nếu trong vòng 300ms
+          
+          touchStarted = true;
+          startDrawing(e);
+        } 
+        // Nếu không đủ điều kiện vẽ thì xem xét thao tác pan
+        else if (!touchStarted && !isDrawing && 
+                (totalMovement >= minMovementToStartDrawing || Date.now() - touchStartTime >= 300)) {
+          
+          if (!isPanning) {
+            isPanning = true;
+            panStartX = touch.clientX - translateX;
+            panStartY = touch.clientY - translateY;
+          } else {
+            translateX = touch.clientX - panStartX;
+            translateY = touch.clientY - panStartY;
+            redrawCanvas();
+          }
         }
       }
     } else if (e.touches.length === 2 && lastTouches) {
@@ -1725,5 +1982,96 @@ function hideUpdateNotification() {
   }
 }
 
+// (Meta tags đã được cập nhật tự động trên server)
+
+// Hiển thị thông báo lỗi kết nối và yêu cầu reload
+function showConnectionErrorModal() {
+  const connectionErrorOverlay = document.getElementById('connection-error-overlay');
+  if (connectionErrorOverlay) {
+    // Hiển thị overlay
+    connectionErrorOverlay.classList.remove('hidden');
+    
+    // Thêm xử lý sự kiện cho nút reload
+    const reloadBtn = document.getElementById('reload-btn');
+    if (reloadBtn) {
+      // Xóa tất cả event listeners cũ (nếu có)
+      const newReloadBtn = reloadBtn.cloneNode(true);
+      reloadBtn.parentNode.replaceChild(newReloadBtn, reloadBtn);
+      
+      // Thêm event listener mới
+      newReloadBtn.addEventListener('click', () => {
+        window.location.reload();
+      });
+    }
+    
+    // Lưu trạng thái hiện tại để có thể khôi phục sau khi tải lại
+    try {
+      // Lưu vào localStorage nếu dữ liệu không quá lớn
+      if (strokes.length > 0) {
+        const localStrokes = JSON.stringify(strokes);
+        if (localStrokes.length < 5000000) { // Giới hạn ~5MB
+          localStorage.setItem(`solarboard_strokes_${boardId}`, localStrokes);
+          localStorage.setItem(`solarboard_strokes_timestamp_${boardId}`, Date.now());
+        }
+      }
+    } catch (error) {
+      console.error('Không thể lưu nét vẽ vào localStorage:', error);
+    }
+  }
+}
+
+// Kiểm tra và khôi phục dữ liệu từ localStorage nếu cần
+function checkForRecoveredStrokes() {
+  try {
+    const recoveredStrokesJson = localStorage.getItem(`solarboard_strokes_${boardId}`);
+    const timestamp = localStorage.getItem(`solarboard_strokes_timestamp_${boardId}`);
+    
+    if (recoveredStrokesJson && timestamp) {
+      // Chỉ khôi phục nếu dữ liệu chưa quá cũ (trong vòng 10 phút)
+      const now = Date.now();
+      const timeDiff = now - parseInt(timestamp);
+      
+      if (timeDiff < 10 * 60 * 1000) { // 10 phút
+        const recoveredStrokes = JSON.parse(recoveredStrokesJson);
+        
+        // Hiển thị thông báo khôi phục
+        if (recoveredStrokes.length > 0) {
+          const notification = document.createElement('div');
+          notification.className = 'recovery-notification';
+          notification.innerHTML = `
+            <div class="recovery-message">
+              <i class="fas fa-history"></i> Đã khôi phục ${recoveredStrokes.length} nét vẽ từ phiên trước.
+              <button class="close-btn"><i class="fas fa-times"></i></button>
+            </div>
+          `;
+          document.body.appendChild(notification);
+          
+          // Xử lý nút đóng thông báo
+          const closeBtn = notification.querySelector('.close-btn');
+          closeBtn.addEventListener('click', () => {
+            notification.remove();
+          });
+          
+          // Tự động ẩn sau 5 giây
+          setTimeout(() => {
+            notification.remove();
+          }, 5000);
+        }
+      }
+      
+      // Xóa dữ liệu khôi phục
+      localStorage.removeItem(`solarboard_strokes_${boardId}`);
+      localStorage.removeItem(`solarboard_strokes_timestamp_${boardId}`);
+    }
+  } catch (error) {
+    console.error('Lỗi khi kiểm tra dữ liệu khôi phục:', error);
+  }
+}
+
 // Start the application
-document.addEventListener('DOMContentLoaded', init);
+document.addEventListener('DOMContentLoaded', () => {
+  init();
+  
+  // Kiểm tra dữ liệu khôi phục
+  checkForRecoveredStrokes();
+});
