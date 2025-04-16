@@ -152,16 +152,6 @@
         const data = await response.json();
         
         if (data.boardId) {
-          // Kích hoạt tạo snapshot trước khi chuyển hướng
-          const snapshotUrl = `/snapshot?diagram=${data.boardId}&thumbnail=true`;
-          try {
-            // Gửi request đến snapshot API để đảm bảo nó được tạo trước
-            const img = new Image();
-            img.src = snapshotUrl;
-          } catch (error) {
-            console.log("Không thể tạo trước snapshot, sẽ được tạo khi chia sẻ");
-          }
-          
           // Redirect to the new board
           window.location.href = `/board/${data.boardId}`;
         } else {
@@ -224,13 +214,7 @@
             }
           }
 
-          // Tạo URL cho snapshot của board
-          const snapshotUrl = `/snapshot?diagram=${board.id}&thumbnail=true`;
-          
           boardCard.innerHTML = `
-            <div class="board-preview">
-              <img src="${snapshotUrl}" alt="Xem trước bảng vẽ #${board.id.substring(0, 8)}" class="board-thumbnail">
-            </div>
             <div class="board-info">
               <h3>Bảng vẽ #${board.id.substring(0, 8)}</h3>
               <p>Tạo lúc: ${timeStr}</p>
