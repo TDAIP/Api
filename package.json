@@ -1,7 +1,7 @@
 {
   "name": "workspace",
   "version": "1.0.0",
-  "main": "server.js",
+  "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -10,8 +10,8 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
-    "canvas": "^3.1.0",
     "express": "^5.1.0",
+    "sharp": "^0.34.1",
     "socket.io": "^4.8.1",
     "uuid": "^11.1.0"
   }

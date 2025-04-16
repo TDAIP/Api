@@ -2,8 +2,9 @@ const express = require('express');
 const http = require('http');
 const socketIO = require('socket.io');
 const path = require('path');
+const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
-const { createCanvas } = require('canvas');
+const sharp = require('sharp');
 
 const app = express();
 const server = http.createServer(app);
@@ -92,7 +93,7 @@ app.get('/api/boards/public', (req, res) => {
 });
 
 // Generate snapshot image of a board for social media previews
-app.get('/snapshot', (req, res) => {
+app.get('/snapshot', async (req, res) => {
   const { diagram, thumbnail } = req.query;
   
   // Check if board exists
@@ -110,23 +111,34 @@ app.get('/snapshot', (req, res) => {
   
   // If no strokes, return a default image
   if (!strokes || strokes.length === 0) {
-    const defaultCanvas = createCanvas(fixedWidth, fixedHeight);
-    const ctx = defaultCanvas.getContext('2d');
+    // Tạo một SVG đơn giản cho bảng vẽ trống
+    const emptySvg = `
+      <svg xmlns="http://www.w3.org/2000/svg" width="${fixedWidth}" height="${fixedHeight}" viewBox="0 0 ${fixedWidth} ${fixedHeight}">
+        <rect width="${fixedWidth}" height="${fixedHeight}" fill="#f5f5f5"/>
+        <text x="${fixedWidth/2}" y="${fixedHeight/2}" font-family="Arial" font-size="24" text-anchor="middle" fill="#333">
+          Bảng vẽ trống
+        </text>
+      </svg>
+    `;
     
-    // Draw a simple default image
-    ctx.fillStyle = '#f5f5f5';
-    ctx.fillRect(0, 0, fixedWidth, fixedHeight);
-    ctx.font = '24px Arial';
-    ctx.fillStyle = '#333';
-    ctx.textAlign = 'center';
-    ctx.fillText('Empty Whiteboard', fixedWidth / 2, fixedHeight / 2);
-    
-    res.setHeader('Content-Type', 'image/png');
-    res.send(defaultCanvas.toBuffer());
+    try {
+      // Chuyển đổi SVG thành PNG sử dụng Sharp
+      const pngBuffer = await sharp(Buffer.from(emptySvg))
+        .resize(fixedWidth, fixedHeight)
+        .png()
+        .toBuffer();
+      
+      res.setHeader('Content-Type', 'image/png');
+      res.send(pngBuffer);
+    } catch (err) {
+      console.error('Error generating empty board image:', err);
+      res.setHeader('Content-Type', 'image/svg+xml');
+      res.send(emptySvg);
+    }
     return;
   }
   
-  // Calculate bounds of all strokes to determine canvas scaling
+  // Calculate bounds of all strokes to determine scaling
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   
   strokes.forEach(stroke => {
@@ -151,14 +163,6 @@ app.get('/snapshot', (req, res) => {
   const contentWidth = maxX - minX;
   const contentHeight = maxY - minY;
   
-  // Create canvas with fixed dimensions
-  const canvas = createCanvas(fixedWidth, fixedHeight);
-  const ctx = canvas.getContext('2d');
-  
-  // Fill background
-  ctx.fillStyle = '#fff';
-  ctx.fillRect(0, 0, fixedWidth, fixedHeight);
-  
   // Calculate scaling to fit all content within the fixed canvas size
   // Maintain aspect ratio while ensuring all content is visible
   let scale = 1;
@@ -168,16 +172,12 @@ app.get('/snapshot', (req, res) => {
     scale = Math.min(scaleX, scaleY);
   }
   
-  // Calculate centering offsets
-  const offsetX = (fixedWidth - contentWidth * scale) / 2;
-  const offsetY = (fixedHeight - contentHeight * scale) / 2;
+  // Tạo SVG từ các stroke của bảng vẽ
+  let svgContent = `<svg xmlns="http://www.w3.org/2000/svg" width="${fixedWidth}" height="${fixedHeight}" viewBox="0 0 ${fixedWidth} ${fixedHeight}">
+    <rect width="${fixedWidth}" height="${fixedHeight}" fill="#ffffff"/>
+    <g transform="translate(${(fixedWidth - contentWidth * scale) / 2}, ${(fixedHeight - contentHeight * scale) / 2}) scale(${scale}) translate(${-minX}, ${-minY})">`;
   
-  // Apply transformations to center and scale the content
-  ctx.translate(offsetX, offsetY);
-  ctx.scale(scale, scale);
-  ctx.translate(-minX, -minY);
-  
-  // Draw all strokes
+  // Add all strokes to SVG
   strokes.forEach(stroke => {
     if (!stroke.points || stroke.points.length < 2) return;
     
@@ -185,23 +185,34 @@ app.get('/snapshot', (req, res) => {
     const color = stroke.color || '#000';
     const width = stroke.width || 2;
     
-    ctx.beginPath();
-    ctx.moveTo(points[0].x, points[0].y);
-    
+    // Create path data
+    let pathData = `M ${points[0].x} ${points[0].y}`;
     for (let i = 1; i < points.length; i++) {
-      ctx.lineTo(points[i].x, points[i].y);
+      pathData += ` L ${points[i].x} ${points[i].y}`;
     }
     
-    ctx.strokeStyle = color;
-    ctx.lineWidth = width;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.stroke();
+    // Add path to SVG
+    svgContent += `<path d="${pathData}" stroke="${color}" stroke-width="${width}" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`;
   });
   
-  // Generate and send image
-  res.setHeader('Content-Type', 'image/png');
-  res.send(canvas.toBuffer());
+  // Close SVG
+  svgContent += `</g></svg>`;
+  
+  try {
+    // Chuyển đổi SVG thành PNG sử dụng Sharp
+    const pngBuffer = await sharp(Buffer.from(svgContent))
+      .resize(fixedWidth, fixedHeight)
+      .png()
+      .toBuffer();
+    
+    res.setHeader('Content-Type', 'image/png');
+    res.send(pngBuffer);
+  } catch (err) {
+    console.error('Error generating board image:', err);
+    // Fallback sang SVG khi Sharp không thể xử lý
+    res.setHeader('Content-Type', 'image/svg+xml');
+    res.send(svgContent);
+  }
 });
 
 // Socket.IO events
