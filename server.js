@@ -2,9 +2,7 @@ const express = require('express');
 const http = require('http');
 const socketIO = require('socket.io');
 const path = require('path');
-const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
-const sharp = require('sharp');
 
 const app = express();
 const server = http.createServer(app);
@@ -31,22 +29,8 @@ app.get('/board/:id', (req, res) => {
   if (!boards[boardId]) {
     return res.redirect('/');
   }
-
-  // Đọc file board.html
-  const fs = require('fs');
-  const boardHtmlPath = path.join(__dirname, 'public', 'board.html');
-  let boardHtml = fs.readFileSync(boardHtmlPath, 'utf8');
   
-  // Tạo URL snapshot cho meta tags
-  const protocol = req.protocol;
-  const host = req.get('host');
-  const snapshotUrl = `${protocol}://${host}/snapshot?diagram=${boardId}&thumbnail=true`;
-  
-  // Thay thế các placeholder trong HTML
-  boardHtml = boardHtml.replace(/{{SNAPSHOT_URL}}/g, snapshotUrl);
-  
-  // Gửi nội dung HTML đã được thay thế
-  res.send(boardHtml);
+  res.sendFile(path.join(__dirname, 'public', 'board.html'));
 });
 
 // Create a new board
@@ -63,12 +47,10 @@ app.post('/api/boards', express.json(), (req, res) => {
   // Calculate expiration date based on expiresIn parameter
   const expirationDate = calculateExpirationDate(expiresIn);
   
-  // Store the original expiresIn setting so we can recover it if needed
   boards[boardId] = {
     isPublic: isPublic === true,
     createdAt: Date.now(),
     expirationDate: expirationDate,
-    expiresIn: expiresIn, // Lưu giá trị ban đầu của expiresIn
     strokes: [],
     admin: userId,
     users: {},
@@ -90,129 +72,6 @@ app.get('/api/boards/public', (req, res) => {
     }));
   
   res.json(publicBoards);
-});
-
-// Generate snapshot image of a board for social media previews
-app.get('/snapshot', async (req, res) => {
-  const { diagram, thumbnail } = req.query;
-  
-  // Check if board exists
-  if (!diagram || !boards[diagram]) {
-    return res.status(404).send('Board not found');
-  }
-  
-  // Cài đặt kích thước cố định cho hình ảnh
-  const fixedWidth = 600;
-  const fixedHeight = 400;
-  
-  // Generate snapshot image
-  const boardData = boards[diagram];
-  const strokes = boardData.strokes;
-  
-  // If no strokes, return a default image
-  if (!strokes || strokes.length === 0) {
-    // Tạo một SVG đơn giản cho bảng vẽ trống
-    const emptySvg = `
-      <svg xmlns="http://www.w3.org/2000/svg" width="${fixedWidth}" height="${fixedHeight}" viewBox="0 0 ${fixedWidth} ${fixedHeight}">
-        <rect width="${fixedWidth}" height="${fixedHeight}" fill="#f5f5f5"/>
-        <text x="${fixedWidth/2}" y="${fixedHeight/2}" font-family="Arial" font-size="24" text-anchor="middle" fill="#333">
-          Bảng vẽ trống
-        </text>
-      </svg>
-    `;
-    
-    try {
-      // Chuyển đổi SVG thành PNG sử dụng Sharp
-      const pngBuffer = await sharp(Buffer.from(emptySvg))
-        .resize(fixedWidth, fixedHeight)
-        .png()
-        .toBuffer();
-      
-      res.setHeader('Content-Type', 'image/png');
-      res.send(pngBuffer);
-    } catch (err) {
-      console.error('Error generating empty board image:', err);
-      res.setHeader('Content-Type', 'image/svg+xml');
-      res.send(emptySvg);
-    }
-    return;
-  }
-  
-  // Calculate bounds of all strokes to determine scaling
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  
-  strokes.forEach(stroke => {
-    if (stroke.points && stroke.points.length > 0) {
-      stroke.points.forEach(point => {
-        minX = Math.min(minX, point.x);
-        minY = Math.min(minY, point.y);
-        maxX = Math.max(maxX, point.x);
-        maxY = Math.max(maxY, point.y);
-      });
-    }
-  });
-  
-  // Add padding to ensure strokes don't touch the edge
-  const padding = 40;
-  minX = Math.max(0, minX - padding);
-  minY = Math.max(0, minY - padding);
-  maxX = maxX + padding;
-  maxY = maxY + padding;
-  
-  // Calculate the content width and height
-  const contentWidth = maxX - minX;
-  const contentHeight = maxY - minY;
-  
-  // Calculate scaling to fit all content within the fixed canvas size
-  // Maintain aspect ratio while ensuring all content is visible
-  let scale = 1;
-  if (contentWidth > 0 && contentHeight > 0) {
-    const scaleX = (fixedWidth - 20) / contentWidth; // -20 for inner margin
-    const scaleY = (fixedHeight - 20) / contentHeight;
-    scale = Math.min(scaleX, scaleY);
-  }
-  
-  // Tạo SVG từ các stroke của bảng vẽ
-  let svgContent = `<svg xmlns="http://www.w3.org/2000/svg" width="${fixedWidth}" height="${fixedHeight}" viewBox="0 0 ${fixedWidth} ${fixedHeight}">
-    <rect width="${fixedWidth}" height="${fixedHeight}" fill="#ffffff"/>
-    <g transform="translate(${(fixedWidth - contentWidth * scale) / 2}, ${(fixedHeight - contentHeight * scale) / 2}) scale(${scale}) translate(${-minX}, ${-minY})">`;
-  
-  // Add all strokes to SVG
-  strokes.forEach(stroke => {
-    if (!stroke.points || stroke.points.length < 2) return;
-    
-    const points = stroke.points;
-    const color = stroke.color || '#000';
-    const width = stroke.width || 2;
-    
-    // Create path data
-    let pathData = `M ${points[0].x} ${points[0].y}`;
-    for (let i = 1; i < points.length; i++) {
-      pathData += ` L ${points[i].x} ${points[i].y}`;
-    }
-    
-    // Add path to SVG
-    svgContent += `<path d="${pathData}" stroke="${color}" stroke-width="${width}" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`;
-  });
-  
-  // Close SVG
-  svgContent += `</g></svg>`;
-  
-  try {
-    // Chuyển đổi SVG thành PNG sử dụng Sharp
-    const pngBuffer = await sharp(Buffer.from(svgContent))
-      .resize(fixedWidth, fixedHeight)
-      .png()
-      .toBuffer();
-    
-    res.setHeader('Content-Type', 'image/png');
-    res.send(pngBuffer);
-  } catch (err) {
-    console.error('Error generating board image:', err);
-    // Fallback sang SVG khi Sharp không thể xử lý
-    res.setHeader('Content-Type', 'image/svg+xml');
-    res.send(svgContent);
-  }
 });
 
 // Socket.IO events
@@ -279,7 +138,6 @@ io.on('connection', (socket) => {
       blockedUsers: boards[boardId].blockedUsers,
       isAdmin: userId === boards[boardId].admin,
       expirationDate: boards[boardId].expirationDate,
-      expiresIn: boards[boardId].expiresIn, // Gửi cả thông tin expiresIn
       createdAt: boards[boardId].createdAt
     });
     
